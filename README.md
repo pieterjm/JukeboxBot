@@ -1,6 +1,8 @@
 # JukeboxBot
 A Bitcoin lightning enabled Jukebox for Telegram
 
+![](assets/JukeboxBot.jpg)
+
 ## General info
  - The name of the bot is 'JukeboxBot'
  - The handle of the bot is "jukebox_fm_bot'
