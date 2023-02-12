@@ -8,8 +8,6 @@ A Bitcoin lightning enabled Jukebox for Telegram
  - The handle of the bot is "jukebox_fm_bot'
 
 ## Backlog
- - Upload code to github
-
  - Connect JukeboxBot to noderunnersfm
  - Integrate callback script and bot script into one script
  - Change polling function to callback from telegram
@@ -23,12 +21,12 @@ A Bitcoin lightning enabled Jukebox for Telegram
  - Personal budget for users. Users have personal budget where they can upload money to later spend on payments for songs -> faster payment flow
  - Create another instance of the bot so that it can be used on other groups. 
  
- ## Problems
-  - When the player is not available, the bot keeps sending messages that the player is not available
-  - When a track is selected, the payment message is a new message. This requires the user to scroll. Instead the track selection message should be replaced
-  - When a payment is not made, the request should be removed after some time (half an hour or so)
-  - Let updates of the price message stay, or add it to the current playing track message (including description of the most important commands)
- 
- 
+## Problems
+  - When the player is not available, the bot keeps sending messages that the player is not available, removed for now  
+  - When a payment is not made, the request should be removed after some time (half an hour or so). Appears not to be a mayor issue
+  - Let updates of the price message stay, or add it to the current playing track message (including description of the most important commands). Maybe the price command should be removed at all. Variable price appears as confusing
+  
 ## Done
  - Create a new bot with the name JukeboxBot
+ - Upload code to github 
+ - When a track is selected, the payment message is a new message. This requires the user to scroll. Instead the track selection message should be replaced. Fixed.

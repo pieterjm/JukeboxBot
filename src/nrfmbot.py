@@ -172,14 +172,6 @@ async def enable(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.delete()
     
 # cancel unused search dialogs
-#async def cancel_message(context: ContextTypes.DEFAULT_TYPE):
-#    #message = await context.job.data['message'].edit_reply_markup(reply_markup=None)
-#    #if ( message.text == BOT_TEXT_QUERY ):
-#    await context.job.data['message'].edit_text('Auto closed') #BOT_TEXT_QUERY_CANCELED)
-#    #await context.job.data['message'].delete()
-    
-
-# cancel unused search dialogs
 async def delete_message(context: ContextTypes.DEFAULT_TYPE):
     try:
         #message = await context.job.data['message'].edit_reply_markup(reply_markup=None)
@@ -395,13 +387,16 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         message = await query.edit_message_text(text=BOT_TEXT_QUERY_CANCELED)
         context.job_queue.run_once(delete_message, 5, data={'message':message})    
     else:
+        
+        
         order = {
             'spotify_uri': qdata,
             'title': getTrackTitle(sp.track(qdata)),
             'userid': update.effective_user.id,
             'price': price,
             'username': update.effective_user.username,
-            'chat_id': update.effective_chat.id
+            'chat_id': update.effective_chat.id,
+            'messageid': query.message.id
         }
         
         if price == 0:
@@ -414,30 +409,26 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 await query.delete_message()
                 return
 
-        # create order
-        logging.info("Creating payment order")
 
         orderid = ''.join(random.choice(string.ascii_letters) for i in range(8))
         order['id'] = orderid
-
+        
         lnbits_id = await lnbits_create_lnurlp(order['id'],order['title'],order['price'])
         order['lnbits_id'] = lnbits_id
         order['paylink'] = "https://{host}{path}{id}".format(id=order['lnbits_id'],host=lnbits_host,path=lnbits_lnurlp_path)        
 
         
-        message = await context.bot.send_message(chat_id=telegram_chat_id,
-                                                 text="@{username} add '{title}'?".format(**order),
-                                                 reply_markup=InlineKeyboardMarkup([
-                                                     [
-                                                        InlineKeyboardButton("Pay {price} sats".format(**order),url=order['paylink'])
-                                                     ]                                                     
-                                                 ]))
-        order['messageid'] = message.id
+        await query.edit_message_text("@{username} add '{title}'?".format(**order))
+        await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("Pay {price} sats".format(**order),url=order['paylink'])
+            ]
+        ]))
         with open(os.path.join(open_orders_path,"{id}.json".format(**order)), 'w') as outfile:
             json.dump(order, outfile)
         
         
-        await query.delete_message()
+        #await query.delete_message()
 
 
 # do the actual payment processing
@@ -469,9 +460,10 @@ async def process_payment(context: ContextTypes.DEFAULT_TYPE,filename: str):
                     headers={'X-Api-Key':lnbits_api_key})
             
         except spotipy.exceptions.SpotifyException:
-            await context.bot.send_message(
-                chat_id=order['chat_id'],
-                text="Could not add '{title}' to the queue. Player unavailable.".format(**order))                    
+            logging.info("Player is not available")
+            #await context.bot.send_message(
+            #    chat_id=order['chat_id'],
+            #    text="Could not add '{title}' to the queue. Player unavailable.".format(**order))                    
 
 
 # callback that checks when a payment is made
