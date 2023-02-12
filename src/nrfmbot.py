@@ -275,7 +275,7 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text = title + "\nUpcoming tracks:\n" + text
             
     await update.message.delete()
-    message = await context.bot.send_message(chat_id=telegram_chat_id,text=text,parse_mode='Markdown')    
+    message = await context.bot.send_message(chat_id=telegram_chat_id,text=text)    
     context.job_queue.run_once(delete_message, 15, data={'message':message})
 
 # create a payment link
