@@ -55,26 +55,15 @@ logging.basicConfig(
 
 # start command handler, returns help information
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.message.chat_id
-    if str(chat_id) == str(telegram_chat_id):
-        text = """You can use one of the following commands:
+    text = """You can use one of the following commands:
 
  /add to search for tracks. Searches can be refined using statements such as 'artist:'.
  /queue to view the list of upcoming tracks. 
-"""
-        user_id = update.effective_user.id
-        if user_id in LIST_OF_ADMINS:
-            text += """
-The following commands are available for admins:
-
- /enable to enable spotify in the group
- /disable to disable spotify in the group
- /price to view or set the price in sats for requesting a song. Setting price to 0 makes requesting songs free
-"""        
-           
-        message = await context.bot.send_message(chat_id=telegram_chat_id,text=text,parse_mode='Markdown')
-        context.job_queue.run_once(delete_message, 30, data={'message':message})
-        await update.message.delete()
+ /history view the list of tracks that were played recently
+"""           
+    message = await context.bot.send_message(chat_id=update.message.chat_id,text=text)
+    context.job_queue.run_once(delete_message, 30, data={'message':message})
+    await update.message.delete()
 
 # construct the track title from a Spotify track item
 def getTrackTitle(item):
@@ -190,9 +179,6 @@ async def delete_message(context: ContextTypes.DEFAULT_TYPE):
 async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # return if not in the correct chat
     chat_id = update.message.chat_id
-    if str(chat_id) != str(telegram_chat_id):
-        logging.info(chat_id)
-        return
 
     # return ifspotify is not allowed
     if spotify_allowed == False:
@@ -202,7 +188,7 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if len(searchstr) > 1:
         searchstr = searchstr[1]
     else:
-        message = await context.bot.send_message(chat_id=telegram_chat_id,text="Use the /add command to search for tracks and add them to the playlist. Enter the name of the artist and/or the song title after the /add command and select a track from the results. For example: \n/add rage against the machine killing in the name\n/add 7th element\n")
+        message = await context.bot.send_message(chat_id=update.message.chat_id,text="Use the /add command to search for tracks and add them to the playlist. Enter the name of the artist and/or the song title after the /add command and select a track from the results. For example: \n/add rage against the machine killing in the name\n/add 7th element\n")
         context.job_queue.run_once(delete_message, 30, data={'message':message})
         await update.message.delete()
         return
@@ -226,16 +212,16 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         # Add a cancel button to the list
         button_list.append([InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))])
-        
+
         message = await context.bot.send_message(
-            chat_id=telegram_chat_id,
+            chat_id=update.message.chat_id,
             text="Results for '{query}'".format(query=searchstr),
             reply_markup=InlineKeyboardMarkup(button_list))
 
         # start a job to kill the search window after 30 seconds if not used
         context.job_queue.run_once(delete_message, 30, data={'message':message})
     else:
-        message = await context.bot.send_message(chat_id=telegram_chat_id,text="No results for '{query}'".format(query=searchstr))
+        message = await context.bot.send_message(chat_id=update.message.chat_id,text="No results for '{query}'".format(query=searchstr))
         context.job_queue.run_once(delete_message, 10, data={'message':message})
 
         
@@ -245,12 +231,6 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # display the play queue
 async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # return if not in the correct chat
-    chat_id = update.message.chat_id
-    if str(chat_id) != str(telegram_chat_id):
-        logging.info(chat_id)
-        return
-
     # return ifspotify is not allowed
     if spotify_allowed == False:
         return
@@ -275,7 +255,7 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text = title + "\nUpcoming tracks:\n" + text
             
     await update.message.delete()
-    message = await context.bot.send_message(chat_id=telegram_chat_id,text=text)    
+    message = await context.bot.send_message(chat_id=update.message.chat_id,text=text)    
     context.job_queue.run_once(delete_message, 15, data={'message':message})
 
 # create a payment link
@@ -401,10 +381,17 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
         if price == 0:
             try:
-                sp.add_to_queue(order['spotify_uri'])                            
+                sp.add_to_queue(order['spotify_uri'])
+                
                 await context.bot.send_message(chat_id=telegram_chat_id,text="@{username} added '{title}' to the queue".format(**order))
+                if update.effective_chat.id != telegram_chat_id:
+                    await context.bot.send_message(chat_id=update.effective_chat.id,text="Added '{title}' to the queue".format(**order))
+                
             except spotipy.exceptions.SpotifyException:
                 await context.bot.send_message(chat_id=telegram_chat_id,text="Could not add '{title}' to the queue. Player unavailable.".format(**order))
+                if update.effective_chat.id != telegram_chat_id:
+                    await context.bot.send_message(chat_id=update.effective_chat.id,text="Could not add '{title}' to the queue. Player unavailable.".format(**order))
+                
             finally:
                 await query.delete_message()
                 return
@@ -452,8 +439,9 @@ async def process_payment(context: ContextTypes.DEFAULT_TYPE,filename: str):
             except:
                 pass
             await context.bot.send_message(chat_id=telegram_chat_id,text="@{username} added '{title}' to the queue".format(**order))
-
-            
+            if telegram_chat_id != order['chat_id']:
+                await context.bot.send_message(chat_id=order['chat_id'],text="Added '{title}' to the queue".format(**order))
+                        
             async with httpx.AsyncClient() as client:
                 await client.delete(
                     "https://{host}/lnurlp/api/v1/links/{payid}".format(host=lnbits_host,payid=order['lnbits_id']),
