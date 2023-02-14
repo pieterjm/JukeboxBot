@@ -30,3 +30,4 @@ A Bitcoin lightning enabled Jukebox for Telegram
  - Create a new bot with the name JukeboxBot
  - Upload code to github 
  - When a track is selected, the payment message is a new message. This requires the user to scroll. Instead the track selection message should be replaced. Fixed.
+ - Reversed history in message

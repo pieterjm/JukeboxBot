@@ -72,17 +72,14 @@ def getTrackTitle(item):
 # get or set the price
 async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global price
-    chat_id = update.message.chat_id
-    if str(chat_id) != str(telegram_chat_id):
-        logging.info(chat_id)
-        return
-        
     text = "Track history:\n"
-    for i in range(min(20,len(track_history))):
+    
+    
+    for i in range(min(20,len(track_history)) - 1,-1,-1):
         item = track_history[i]
         text += " {title}\n".format(title=item)            
 
-    message = await context.bot.send_message(chat_id=telegram_chat_id,text=text,parse_mode='Markdown')    
+    message = await context.bot.send_message(chat_id=update.message.chat_id,text=text)    
     context.job_queue.run_once(delete_message, 20, data={'message':message})
     await update.message.delete()
 
@@ -439,7 +436,7 @@ async def process_payment(context: ContextTypes.DEFAULT_TYPE,filename: str):
             except:
                 pass
             await context.bot.send_message(chat_id=telegram_chat_id,text="@{username} added '{title}' to the queue".format(**order))
-            if telegram_chat_id != order['chat_id']:
+            if str(telegram_chat_id) != str(order['chat_id']):
                 await context.bot.send_message(chat_id=order['chat_id'],text="Added '{title}' to the queue".format(**order))
                         
             async with httpx.AsyncClient() as client:
@@ -449,9 +446,9 @@ async def process_payment(context: ContextTypes.DEFAULT_TYPE,filename: str):
             
         except spotipy.exceptions.SpotifyException:
             logging.info("Player is not available")
-            #await context.bot.send_message(
-            #    chat_id=order['chat_id'],
-            #    text="Could not add '{title}' to the queue. Player unavailable.".format(**order))                    
+            await context.bot.send_message(
+                chat_id=order['chat_id'],
+                text="Could not add '{title}' to the queue. Player unavailable.".format(**order))                    
 
 
 # callback that checks when a payment is made
