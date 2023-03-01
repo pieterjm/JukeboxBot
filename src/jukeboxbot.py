@@ -426,6 +426,18 @@ async def main() -> None:
         )
         return Response()
 
+    async def lnbits_lnurlp_callback(request: Request) -> PlainTextResponse:
+        """
+        Callback from LNbits when a wallet is funded
+        """
+        tguserid = request.query_params['userid']
+        if re.search("^[0-9]+$",userid):            
+            await application.bot.send_message(
+                chat_id=int(tguserid),
+                text=f"Received a funding payment.")
+            print(await request.body())
+        
+    
     async def custom_updates(request: Request) -> PlainTextResponse:
         """
         Handle incoming webhook updates by also putting them into the `update_queue` if
@@ -457,6 +469,7 @@ async def main() -> None:
             Route("/telegram", telegram, methods=["POST"]),
             Route("/healthcheck", health, methods=["GET"]),
             Route("/submitpayload", custom_updates, methods=["POST", "GET"]),
+            Route("/lnbitscallback", lnbits_lnurlp_callback, methods=["POST"])
         ]
     )
     webserver = uvicorn.Server(
