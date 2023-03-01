@@ -32,7 +32,11 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
 
-from telegram import Update
+from telegram import (
+    Update,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton
+)
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
@@ -49,18 +53,7 @@ from user import User, SpotifySettings
 import userhelper
 import settings
 
-
-# this has to be entered later, when the group is now
-#spotifyauth = SpotifyOAuth(
-#    scope='user-read-currently-playing,user-modify-playback-state,user-read-playback-state',
-#    client_secret=os.environ['MY_SPOTIPY_CLIENT_SECRET'],
-#    client_id=os.environ['MY_SPOTIPY_CLIENT_ID'],
-#    redirect_uri=os.environ['MY_SPOTIPY_REDIRECT_URI'],
-#    show_dialog=False,
-#    open_browser=False
-#)
-
-settings.init('test')
+settings.init('development')
 
 
 @dataclass
@@ -145,7 +138,7 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # we're in a private chat now
-    user = get_or_create_user(update.effective_user.id,update.effective_user.username)
+    user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
             
     # get the balance from LNbits
     balance = await settings.lnbits.getBalance(user.invoicekey)
@@ -161,7 +154,7 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # Connect a spotify player to the bot, the connect command
 async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # get spotify settings for the user
-    sps = get_spotify_settings(update.effective_user.id)    
+    sps = userhelper.get_spotify_settings(update.effective_user.id)    
     
     # this command has to be execute from within a group
     if update.message.chat.type == "private":
@@ -239,7 +232,7 @@ async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # send a message that configuration is required
         message = await context.bot.send_message(
             chat_id=update.message.chat_id,
-            text=f"Additional configuration is required, execute this command in a private chat with me."
+            text=f"Additional configuration is required, execute this command in a private chat with me.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"Take me there",url=f"https://t.me/{bot_me.username}")]
             ]))
@@ -265,7 +258,7 @@ async def spotify_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     
     # get spotify settings for the user
-    sps = get_spotify_settings(update.effective_user.id)
+    sps = userhelper.get_spotify_settings(update.effective_user.id)
 
     result = re.search("/(setclientid|setclientsecret)\s+([a-z0-9]+)\s*$",update.message.text)
     if result is None:
@@ -286,12 +279,12 @@ async def spotify_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         bSave = True
         
     if bSave == True:
-        save_spotify_settings(sps)
+        userhelper.save_spotify_settings(sps)
     
 
 # fund the wallet of the user
 async def fund(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = get_or_create_user(update.effective_user)
+    user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
 
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -334,7 +327,7 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # we're in a private chat now
-    user = get_or_create_user(update.effective_user)
+    user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
 
     # create QR code for the link    
     filename = get_qrcode_image_filename(lndhublink)
@@ -360,7 +353,7 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # get the patment request from the regular expression
     payment_request = result.groups()[0]
 
-    user = get_or_create_user(update.effective_user)
+    user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
     
     # pay the invoice
     payment_result = await settings.lnbits.payInvoice(payment_request,user.adminkey)
@@ -416,8 +409,8 @@ async def main() -> None:
     application.add_handler(CommandHandler('pay', pay)) # only in private chat
     #application.add_handler(CommandHandler('price', play_price))
     #application.add_handler(CommandHandler('queue', queue))
-    application.add_handler(CommandHandler("setclientsecret",setspotify))    # TODO only in private chat
-    application.add_handler(CommandHandler("setclientid",setspotify))  # TODO only in private chat
+    application.add_handler(CommandHandler("setclientsecret",spotify_settings))    # TODO only in private chat
+    application.add_handler(CommandHandler("setclientid",spotify_settings))  # TODO only in private chat
     application.add_handler(CommandHandler(["start","help"],start))    
     #application.add_handler(CommandHandler(['dj','zap'], zap))            
     application.add_handler(TypeHandler(type=WebhookUpdate, callback=webhook_update))
