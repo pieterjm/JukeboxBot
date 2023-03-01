@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 import asyncio
+import re
 import os
+import json
 from time import time
 import html
 import logging
@@ -428,16 +430,24 @@ async def main() -> None:
 
     async def lnbits_lnurlp_callback(request: Request) -> PlainTextResponse:
         """
-        Callback from LNbits when a wallet is funded
+        Callback from LNbits when a wallet is funded. Send a message to the telegram user
+
+        The callback is a POST request with a userid parameter in the URL
+        
+        The body content should be similar to the following
+
+        {"payment_hash": "6d0734e641013e56767c6d8e4c0d02e6db0ddfdaa35cc370320e0cafb66565e7", "payment_request": "lnbc210n1p3l7k46pp5d5rnfejpqyl9vanudk8ycrgzumdsmh765dwvxupjpcx2ldn9vhnshp58aq3spsfd2263qpprxz7pqvhqm03mf2np6n9j8v0fpu7zqma94dqcqzpgxqzjcsp52d0hk2pzn75ugwzxev8tnf8xype05eaeadpmmv6rg72zchm649xs9qyyssqptzl7wwwkkjmaggr4s0m6gghmtla0uv38036m9py535ezng3pmxne69tw5p99f4e2vv4kqpwyx2kle6yn2xw4qes5268j97d3ycn97gp954uw3", "amount": 21000, "comment": null, "lnurlp": "2bP7Xn", "body": ""}'
+        
         """
         tguserid = request.query_params['userid']
-        if re.search("^[0-9]+$",userid):            
+        if re.search("^[0-9]+$",tguserid):            
+            obj = json.loads(await request.body())
+            amount = int(obj['amount'] / 1000)            
             await application.bot.send_message(
                 chat_id=int(tguserid),
-                text=f"Received a funding payment.")
-            print(await request.body())
-        
-    
+                text=f"Received {amount} sats.Type /balance to view your balance.")
+        return Response()
+            
     async def custom_updates(request: Request) -> PlainTextResponse:
         """
         Handle incoming webhook updates by also putting them into the `update_queue` if
