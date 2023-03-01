@@ -3,7 +3,7 @@ import os
 import base64
 import asyncio
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo, MessageEntity
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo, MessageEntity, ChatMember
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler, CallbackContext, MessageHandler, filters
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -14,7 +14,9 @@ import random
 import string
 import shutil
 import redis
+from lnbits import LNbits
 from time import time
+import qrcode
 
 rds = redis.Redis()
 
@@ -27,9 +29,16 @@ telegram_chat_id = os.environ['TELEGRAM_CHAT_ID']
 telegram_token = os.environ['TELEGRAM_TOKEN']
 status_json = os.environ['STATUS_JSON']
 lnbits_host=os.environ['LNBITS_HOST']
+lnbits_public_host=os.environ['LNBITS_PUBLIC_HOST']
+lnbits_protocol=os.environ['LNBITS_PROTOCOL']
 lnbits_api_key=os.environ['LNBITS_API_KEY']
+lnbits_admin_id=os.environ['LNBITS_ADMIN_ID']
+lnbits_invoice_key=os.environ['LNBITS_INVOICE_KEY']
 lnbits_callback_url = os.environ['LNBITS_CALLBACK_URL']
+qrcode_path = os.environ['QRCODE_PATH']
 
+
+tip = 7
 price = int(os.environ['REQUEST_PRICE'])
 LIST_OF_ADMINS = json.loads(os.environ['LIST_OF_ADMINS'])
 lnbits_lnurlp_path = os.environ['LNBITS_LNURLP_PATH']
@@ -37,19 +46,29 @@ open_orders_path = os.environ['OPEN_ORDERS_PATH']
 paid_orders_path = os.environ['PAID_ORDERS_PATH']
 done_orders_path = os.environ['DONE_ORDERS_PATH']
 expired_orders_path = os.environ['EXPIRED_ORDERS_PATH']
-playlist_path = os.environ['PLAYLIST_PATH']
-max_playlist_tracks = int(os.environ['MAX_PLAYLIST_TRACKS'])
 
 
 spotify_allowed = True
 telegram_now_id = 0 #os.environ['TELEGRAM_NOW_PLAYING_ID']
 
+lnbits = LNbits(lnbits_protocol,lnbits_host)
 
 # initializie spotipy
-scope = 'user-read-currently-playing,user-modify-playback-state,user-read-playback-state'
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
-track_history = []
+scope = 'user-read-currently-playing,user-modify-playback-state,user-read-playback-state' # playlist-modify-private'
 
+am = SpotifyOAuth(
+    scope=scope,
+    client_secret=os.environ['MY_SPOTIPY_CLIENT_SECRET'],
+    client_id=os.environ['MY_SPOTIPY_CLIENT_ID'],
+    redirect_uri=os.environ['MY_SPOTIPY_REDIRECT_URI'],
+    show_dialog=False,
+    open_browser=False
+)
+
+#print(am.get_authorize_url())
+#quit()
+
+sp = spotipy.Spotify(auth_manager=am)
 
 # Enable logging
 logging.basicConfig(
@@ -59,158 +78,102 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-def getbalance(userid):
-    userkey = f"user:{userid}"
-    key = "balance"
+# Create a QR code and store in filename
+def get_qrcode_image_filename(data):
+    filename = os.path.join(qrcode_path,"{}.png".format(hash(data)))
+    if not os.path.isfile(filename):
+        img = qrcode.make(data)
+        file = open(filename,'wb')
+        if file:
+            img.save(file)
+            file.close()
 
-    balance = rds.hget(userkey,key)
-    if balance is not None:
-        return int(balance)
+    return filename
+    
+# pay and invoice
+async def pay_invoice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    result = re.search("/pay_invoice\s+(lnbc[a-z0-9]+)\s*$",update.message.text)
+    if result is None:
+        await context.bot.send_message(
+            chat_id=update.effective_user.id,
+            text="Unknown lightning invoice format. Should start with 'lnbc'.")
+        return
+        
+    
+    payment_request = result.groups()[0]
+    
+    payment_result = await lnbits.payinvoice(payment_request, await get_user_adminkey(update.effective_user.id))
+    if payment_result['result'] == True:
+        await context.bot.send_message(
+            chat_id=update.effective_user.id,
+            text="Payment succes.")
     else:
-        rds.hset(userkey,key,0)
-        return 0
+        await context.bot.send_message(
+            chat_id=update.effective_user.id,
+            parse_mode='HTML',
+            text="Payment failed. <pre>{detail}</pre>".format(detail=payment_result['detail']))
+        
     
-def addtobalance(userid, amount):
-    userkey = f"user:{userid}"
-    key = "balance"
-
-    # nothing to do
-    if amount == 0:
-        return True
     
-    # check sufficient balance
-    balance = getbalance(userid)
-    if ( balance + amount < 0 ):
-        return False
 
-    # add/decr amount
-    newamount = rds.hincrby(userkey,key,amount)
-    if newamount >= 0:
-        return True
-    elif newamount < 0:
-        # roll back
-        rds.hincrby(userkey,key,-1 * amount)
-        return False
+# Connect spotify player
+async def connect_player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    print(update.message.chat.type)
+    if update.message.chat.type == "private":
+        message = await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text="Send this command in the group where you want to connect the bot")
+        return
+
+    admin = False
+    for member in await context.bot.get_chat_administrators(update.message.chat.id):
+        if member.user.id == update.effective_user.id and member.status in ['administrator','creator']:
+            admin = True
             
-async def clear_playlist(userid):
-    filename = os.path.join(playlist_path,"{userid}.json".format(userid=userid))
-    if os.path.isfile(filename):
-        os.unlink(filename)
-
-async def get_playlist(userid):
-    filename = os.path.join(playlist_path,"{userid}.json".format(userid=userid))
-    if os.path.isfile(filename):    
-        with open(filename) as file:
-            jsobj = json.load(file)
-            return jsobj['playlists'][0]
-    return []
-
-async def add_playlist_to_queue(userid):
-    playlist = await get_playlist(userid)
-    retval = False
-    for item in playlist:
-        retval = True
-        sp.add_to_queue(item['uri'])
-    await clear_playlist(userid)
-    return retval
-    
-        
-async def add_to_playlist(userid, uri):
-    filename = os.path.join(playlist_path,"{userid}.json".format(userid=userid))
-
-    jsobj = None
-    if os.path.isfile(filename):
-        with open(filename) as file:
-            jsobj = json.load(file)
-    else:
-        jsobj = {
-            'playlists':[[]]
-        }
-
-    for item in jsobj['playlists'][0]:
-        if item['uri'] == uri:
-            return False
-    
-    jsobj['playlists'][0].append({
-        'uri':uri,
-        'title': getTrackTitle(sp.track(uri)),
-    })
-    
-    with open(filename,"w") as file:
-        json.dump(jsobj,file)
-
-    return True
-
-
-# let an order expire
-async def expire_order(context: ContextTypes.DEFAULT_TYPE):
-    if 'orderid' not in context.job.data:
-        logging.warning("No order id in expire order call")
-        return
-    
-    orderid = context.job.data['orderid']
-    filename = os.path.join(open_orders_path, f"{orderid}.json")
-
-    # load order
-    order = None
-    if os.path.isfile(filename):
-        with open(filename) as file:
-            order = json.load(file)
-
-        try:
-            shutil.move(filename,expired_orders_path)
-        except:
-            logging.warning("Could not move {} to {}".format(filename,expired_orders_path))
-                        
-    if order is None:
-        logging.warning("could not retrieve order with id {id} from file".format(id=orderid))
-        return
-
-    # delete payment link
-    async with httpx.AsyncClient() as client:
-        await client.delete(
-            "https://{host}/lnurlp/api/v1/links/{payid}".format(host=lnbits_host,payid=order['lnbits_id']),
-            headers={'X-Api-Key':lnbits_api_key})
-
-        
-
-    print(order['chat_id'],order['messageid'])
-    try:
-        await context.bot.delete_message(order['chat_id'],order['messageid'])
-    except:
-        pass
-        
-
-    
-# start command handler, returns help information
-async def playlist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    
-    if str(update.message.chat_id) == str(telegram_chat_id):
+    if admin == False:
         message = await context.bot.send_message(
             chat_id=update.message.chat_id,
-            text="The /playlist command is only available in a private chat with me"
-        )
-        context.job_queue.run_once(delete_message, 60, data={'message':message})        
-    else:
-    
-        message = await context.bot.send_message(
-            chat_id=update.message.chat_id,
-            text="Manage your playlist",        
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("View playlist", callback_data = "{userid}:VIEWPLAYLIST".format(userid=update.effective_user.id))],
-                [InlineKeyboardButton("Propose playlist", callback_data = "{userid}:PROPOSEPLAYLIST".format(userid=update.effective_user.id))],
-                [InlineKeyboardButton("Clear playlist", callback_data = "{userid}:CLEARPLAYLIST".format(userid=update.effective_user.id))],
-                [InlineKeyboardButton("Cancel", callback_data = "{userid}:CANCEL".format(userid=update.effective_user.id))]            
-            ]))
-        #context.job_queue.run_once(delete_message, 20, data={'message':message})
-    await update.message.delete()
+            text="You are not an admin in this chat.")
+        return
 
+    bot_me = await context.bot.get_me()
+    message = await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text="I'm sending instructions in the private chat.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"Take me there",url=f"https://t.me/{bot_me.username}")]
+        ]))
+
+
+    message = await context.bot.send_message(
+        chat_id=update.effective_user.id,
+        text="Clicking on the button below will take you to Spotify where you can grant the bot the authorisation to control the player.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"Authorize player",url=am.get_authorize_url())]
+        ]))
+
+    
+    
+    
 # get current balance
-async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:    
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    
     if str(update.message.chat_id) == str(telegram_chat_id):
+        bot_me = await context.bot.get_me()
+        print(f"https://t.me/{bot_me.username}")
+    
+        message = await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text="Like keeping your mnenomic seedphrase offline, it is better to query your balance in a private chat with me.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"Take me there",url=f"https://t.me/{bot_me.username}")]
+            ]))
+
+        context.job_queue.run_once(delete_message, 60, data={'message':message})
+        # direct the user to their private chat
         return
 
-    balance = getbalance(update.effective_user.id)
+    balance = await lnbits.getbalance(await get_user_invoicekey(update.effective_user.id))
     
     message = await context.bot.send_message(
         chat_id=update.message.chat_id,
@@ -218,42 +181,41 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await update.message.delete()
 
+
+# get lndhub link
+async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    
+    if str(update.message.chat_id) == str(telegram_chat_id):
+        bot_me = await context.bot.get_me()
+        print(f"https://t.me/{bot_me.username}")
+    
+        message = await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text="Like keeping your mnenomic seedphrase offline, it is better to request your lndhub link in a private chat with me.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"Take me there",url=f"https://t.me/{bot_me.username}")]
+            ]))
+
+        context.job_queue.run_once(delete_message, 60, data={'message':message})
+        # direct the user to their private chat
+        return
+
+    lndhublink = await get_user_lndhub(update.effective_user.id)
+    filename = get_qrcode_image_filename(lndhublink)
+    with open(filename,'rb') as file:
+        message = await context.bot.send_photo(
+            update.message.chat_id,
+            file,
+            caption=f"Scan this QR code with an lndhub compatible wallet like BlueWallet or Zeus. Your lndhub link is:\n<pre>{lndhublink}</pre>",
+            parse_mode='HTML')
+
+    await update.message.delete()    
+
 # give sats to user
 async def deejay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-
-    amount = price
-    if update.message.text == "/dj":
-        amount = price
-    else:
-        s = update.message.text.split(' ',1)
-        if len(s) == 2:
-            amount = abs(int(s[1]))
-            
-    
-    if update.message.reply_to_message is None:
-        await context.bot.send_message(chat_id=update.message.chat_id,text="Use this command in a reply to a message")
-        await update.message.delete()
-        return
-        
-    user_id = update.effective_user.id
-    if user_id not in LIST_OF_ADMINS and addtobalance(user_id,-1 * amount) == False:
-        await context.bot.send_message(chat_id=update.message.chat_id,text="Not enough sats available")
-        await update.message.delete()
-        return
-
-    recipient_user_id = update.message.reply_to_message.from_user.id
-    print(recipient_user_id)
-    if addtobalance(recipient_user_id,amount) == True:
-        await context.bot.send_message(
-            chat_id=update.message.chat_id,
-            text=f"@{update.message.reply_to_message.from_user.username} received {amount} sats from @{update.message.from_user.username}")
-
     await update.message.delete()
-    
 
     
-
 # start command handler, returns help information
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = """You can use one of the following commands:
@@ -262,10 +224,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
  /add to search for tracks. Searches can be refined using statements such as 'artist:'.
  /queue to view the list of upcoming tracks. 
  /history view the list of tracks that were played recently
- /playlist is available in private chats, and can be used to manage a personal playlist. 
  /dj <amount> to share some of your sats balance with another user. Use this command in a reply to them.
 
-You can also chat in private with me at @noderunners_hero_bot to request tracks and create a playlist.
+You can also chat in private with me to do stuff like viewing your balance.
+
+ /balance shows your balance.
+ /fund can be used to add sats to your balance. While you can pay for each track, you can also add some sats in advance.
+ /link provides an lndhub URL so that you can connect BlueWallet or Zeus to your wallet in the bot. That also makes it possible to withdraw/add funds.
 
 The NOSTR pubkey of NoderunnersFM is: npub1ua6fxn9ktc4jncanf79jzvklgjftcdrt5etverwzzg0lgpmg3hsq2gh6v6
 """           
@@ -281,11 +246,11 @@ def getTrackTitle(item):
 async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global price
     text = "Track history:\n"
-    
-    
-    for i in range(min(20,len(track_history)) - 1,-1,-1):
-        item = track_history[i]
-        text += " {title}\n".format(title=item)            
+
+    historykey = f"history:{telegram_chat_id}"
+    for i in range(0, min(20,rds.llen(historykey))):
+        title = rds.lindex(historykey, i).decode('utf-8')
+        text += f"{title}\n"            
 
     message = await context.bot.send_message(chat_id=update.message.chat_id,text=text)    
     context.job_queue.run_once(delete_message, 20, data={'message':message})
@@ -305,8 +270,8 @@ async def play_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         context.job_queue.run_once(delete_message, 20, data={'message':message})        
         await update.message.delete()
     else:        
-        user_id = update.effective_user.id
-        if user_id not in LIST_OF_ADMINS:
+        userid = update.effective_user.id
+        if userid not in LIST_OF_ADMINS:
             await update.message.delete()
             return
         
@@ -342,8 +307,8 @@ async def disable(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if str(chat_id) != str(telegram_chat_id):
         return
     
-    user_id = update.effective_user.id
-    if user_id in LIST_OF_ADMINS:
+    userid = update.effective_user.id
+    if userid in LIST_OF_ADMINS:
         spotify_allowed = False
         message = await context.bot.send_message(chat_id=telegram_chat_id,text="Music control disabled")
         context.job_queue.run_once(delete_message, 20, data={'message':message})
@@ -357,8 +322,8 @@ async def enable(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if str(chat_id) != str(telegram_chat_id):
         return
 
-    user_id = update.effective_user.id
-    if user_id in LIST_OF_ADMINS:
+    userid = update.effective_user.id
+    if userid in LIST_OF_ADMINS:
         spotify_allowed = True
         message = await context.bot.send_message(chat_id=telegram_chat_id,text="Music control enabled")
         context.job_queue.run_once(delete_message, 20, data={'message':message})
@@ -384,7 +349,7 @@ async def delete_message(context: ContextTypes.DEFAULT_TYPE):
 # search command handler
 async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # return if not in the correct chat
-    chat_id = update.message.chat_id
+    chat_id = update.message.chat_id    
 
     # return ifspotify is not allowed
     if spotify_allowed == False:
@@ -399,6 +364,38 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.delete()
         return
 
+    # check if the search string is a spotify URL
+    match = re.search('https://open.spotify.com/playlist/([A-Za-z0-9]+).*$',searchstr)
+    if (match):
+        playlistid = match.groups()[0]
+        result = sp.playlist(playlistid,fields=['name'])
+        message = await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=f"@{update.effective_user.username} wants you to play tracks from the '{result['name']}' playlist.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(f"Pay {price} sats for a random track", callback_data = f"0:PLAYRANDOM:{playlistid}:1"),
+            ]]))
+
+        
+#        message = await context.bot.send_message(
+#            chat_id=update.message.chat_id,
+#            text=f"How many random tracks of the '{result['name']}' playlist do you want to add?",
+#            reply_markup=InlineKeyboardMarkup([[
+#                InlineKeyboardButton("1", callback_data = f"{update.effective_user.id}:PLAYRANDOM:{playlistid}:1"),
+#                InlineKeyboardButton("2", callback_data = f"{update.effective_user.id}:PLAYRANDOM:{playlistid}:2"),
+#                InlineKeyboardButton("3", callback_data = f"{update.effective_user.id}:PLAYRANDOM:{playlistid}:3"),
+#                InlineKeyboardButton("4", callback_data = f"{update.effective_user.id}:PLAYRANDOM:{playlistid}:4"),
+#                InlineKeyboardButton("5", callback_data = f"{update.effective_user.id}:PLAYRANDOM:{playlistid}:6")
+#            ]]))
+        
+        # start a job to kill the message  after 30 seconds if not used
+        context.job_queue.run_once(delete_message, 180, data={'message':message})
+    
+        # delete the original message
+        await update.message.delete()
+
+        return
+        
     # search for tracks
     result = sp.search(searchstr)
     
@@ -464,30 +461,6 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = await context.bot.send_message(chat_id=update.message.chat_id,text=text)    
     context.job_queue.run_once(delete_message, 15, data={'message':message})
 
-# create a payment link
-async def lnbits_create_lnurlp(orderid,title,min_price,max_price):
-    global lnbits_callback_url, lnbits_host, lnbits_api_key
-    # create lightning invoice and display the QR code
-    payment_data = {
-        "description": title,
-        "max": max_price,
-        "min": min_price,
-        "comment_chars": 0,
-        "webhook_url": "{url}?orderid={orderid}".format(url=lnbits_callback_url,orderid=orderid)
-    }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://{host}/lnurlp/api/v1/links".format(host=lnbits_host),
-            json=payment_data,
-            headers={'X-Api-Key':lnbits_api_key})
-        result = response.json()
-        return result['id']
-
-
-    raise Exception("Did not get id from lnbits")
-
-        
         
 # This function displays the current track being played
 # the current track is updated in the same telegram message
@@ -499,15 +472,29 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE):
     
     try:
         track = sp.current_user_playing_track()
+
+        
         brinkietitle = "Nothing is playing at the moment"
             
         if track:
             title = getTrackTitle(track['item'])
-            if title not in track_history:
-                track_history.append(title)
-            while len(track_history) > 20:
-                track_history.pop(0)
-                
+
+            historykey = f"history:{telegram_chat_id}"
+            rds_title = rds.lindex(historykey,0)
+            if rds_title is None:
+                rds.lpush(historykey,title)
+            else:
+                rds_title = rds_title.decode('utf-8')
+                if rds_title != title:
+                    rds.lpush(historykey,title)
+                    
+                if rds.llen(historykey) > 100:
+                    rds.rpop(historykey)
+
+
+            rds.hset(f"lastplayed:{telegram_chat_id}",title,int(time()))
+            
+                    
             brinkietitle = "🎵 {title} 🎵".format(title=title)
 
             # update status to file
@@ -523,10 +510,10 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE):
                 
             # make an educated guess when to check again
             next_check  = ( track['item']['duration_ms'] - track['progress_ms'] ) / 1000
-            if next_check > 60:
-                next_check = 60
-            if next_check < 10:
-                next_check = 10
+            if next_check > 90:
+                next_check = 90
+            if next_check < 5:
+                next_check = 5
 
 
         # send or update the current track message
@@ -551,40 +538,92 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE):
 
 #callback for button presses
 async def fund(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # create an order
-    order = {
-        'title': f'Fund the wallet of @{update.effective_user.username}',
-        'type': 'fund',
-        'timestamp': int(time()),
-        'userid': update.effective_user.id,
-        'username': update.effective_user.username,
-        'chat_id': update.effective_chat.id
-    }    
-
-    order['id'] = ''.join(random.choice(string.ascii_letters) for i in range(8))
-
-    lnbits_id = await lnbits_create_lnurlp(order['id'],order['title'],price, 100 * price)
-    order['lnbits_id'] = lnbits_id
-    order['paylink'] = "https://{host}{path}{id}".format(id=order['lnbits_id'],host=lnbits_host,path=lnbits_lnurlp_path)        
-
+    user_lnurlp = await get_user_lnurlp(update.effective_user.id,update.effective_user.username)
+    
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=order['title'],
+        text=f"Click on the button to fund the wallet of @{update.effective_user.username}. Anyone can spend!",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("Open payment link".format(**order),url=order['paylink'])]
+            [InlineKeyboardButton(f"Fund sats",url=user_lnurlp)]
             ]))
-    order['messageid'] = message.id
-    context.job_queue.run_once(expire_order, 300, data={'orderid':order['id']})
+    context.job_queue.run_once(delete_message, 60, data={'message':message})        
+    
+    await update.message.delete()
+
+# add track(s) to the play queue
+# verify that the track has not been played before in the last hour(s) or so
+async def add_to_queue(context: ContextTypes.DEFAULT_TYPE, spotify_uri_list, username, chat_id):
+    text = ""
+    if len(spotify_uri_list) == 1:
+        text=f"@{username} added '{getTrackTitle(sp.track(spotify_uri_list[0]))}' to the queue"
+    else:
+        text = f"@{username} added to the queue:\n"
+        for item in spotify_uri_list:
+            text += f" {getTrackTitle(sp.track(item))}\n"
+            sp.add_to_queue(item)            
+
+    # send a message
+    await context.bot.send_message(chat_id=chat_id,text=text)
+
+    # add to playlist
+    # this does not yet work, 
+    # sp.playlist_add_items('30LZGM5LM95Wv3qggybvQF', spotify_uri_list)
+    
 
     
-    with open(os.path.join(open_orders_path,"{id}.json".format(**order)), 'w') as outfile:
-        json.dump(order, outfile)
-    await update.message.delete()
+
+async def callback_check_invoice(context: ContextTypes.DEFAULT_TYPE):
+    paid = False
+    
+    # check if the invoice has been paid
+    if paid == False and await lnbits.check_invoice(context.job.data['invoicekey'],context.job.data['payment_hash']) == True:        
+        paid = True
+
+
+    if paid == False:
+        payment_result = await lnbits.payinvoice(context.job.data['payment_request'],context.job.data['adminkey'])
+        if payment_result['result'] == True:
+            paid = True
+
+    if paid == True:
+        await add_to_queue(context,context.job.data['spotify_uri_list'],context.job.data['username'],context.job.data['chat_id'])
+        await context.bot.delete_message(context.job.data['chat_id'],context.job.data['message_id'])
+        return
+
+    
+    
+    if context.job.data['timeout'] <= 0:
+        await context.bot.delete_message(context.job.data['chat_id'],context.job.data['message_id'])
+        return
+    else:
+        # reschedule job
+        context.job.data['timeout'] -= 5
+        title = context.job.data['title']
         
+
+        balance = await lnbits.getbalance(await get_user_invoicekey(context.job.data['userid']))
+        amount = context.job.data['amount_to_pay'] - balance
+        
+        # update message with updated amount
+        try:
+            await context.bot.edit_message_text(
+                text=f"@{context.job.data['username']} add '{title}' to the play queue?\n\nYou have to fund your balance with at least <b>{amount}</b> sats to add '{title}' to the queue.\n\nSats paid in excess will not be lost and are added to your balance to pay for additional tracks.",
+                chat_id=context.job.data['chat_id'],
+                message_id=context.job.data['message_id'],
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton(f"Open payment link",url=context.job.data['lnurlp']),
+                    InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=context.job.data['userid']))
+                ]]))
+        except:
+            pass
+            
+        
+        context.job_queue.run_once(callback_check_invoice, 5, data=context.job.data)
+
     
 #callback for button presses
 async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    global price, paymentlinks, telegram_chat_id
     if spotify_allowed == False:
         await query.edit_message_text(text=BOT_TEXT_QUERY_SPOTIFY_UNAVAILABLE)
         return
@@ -599,8 +638,8 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     userid, qdata = query.data.split(':',1)        
     
-    # only the user that requested the track can select a track
-    if str(userid) != str(update.effective_user.id):
+    # only the user that requested the track can select a track   
+    if int(userid) != 0 and str(userid) != str(update.effective_user.id):
         logging.info("Avoiding real click")
         return
 
@@ -608,362 +647,105 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         message = await query.edit_message_text(text=BOT_TEXT_QUERY_CANCELED)
         context.job_queue.run_once(delete_message, 5, data={'message':message})
         return
-    elif qdata.startswith("ADDTOPLAYLIST"):
-        if (  await add_to_playlist(update.effective_user.id,qdata.split(':',1)[1]) ):
-            message = await query.edit_message_text(text="Added to playlist")
-            context.job_queue.run_once(delete_message, 5, data={'message':message})
-        else:
-            message = await query.edit_message_text(text="Not added to playlist. Already added or list too long?")
-            context.job_queue.run_once(delete_message, 5, data={'message':message})
-        return
-    elif qdata.startswith("CLEARPLAYLIST"):
-        await clear_playlist(update.effective_user.id)
-        message = await query.edit_message_text(text="Playlist emptied")
-        context.job_queue.run_once(delete_message, 5, data={'message':message})
-        return
-    elif qdata.startswith("VIEWPLAYLIST"):
-        playlist = await get_playlist(update.effective_user.id)
-        text = ""
-        for item in playlist:
-            text += "{}\n".format(item['title'])
-        if len(text) == 0:
-            text = "nothing in playlist"
-        message = await query.edit_message_text(text=text)
-        context.job_queue.run_once(delete_message, 30, data={'message':message})
-        return
-    elif qdata.startswith("PROPOSEPLAYLIST"):
-        playlist = await get_playlist(update.effective_user.id)
+    elif qdata.startswith("PLAYRANDOM"):
+        (command, playlistid, amount) = qdata.split(':')
+    
+        result = sp.playlist_items(playlistid,offset=0,limit=1)
+        llen = result['total'] 
+        
+        amount = int(amount)
+        if result['total'] < amount:
+            amount = result['total']
 
-        if len(playlist) == 0:
-            message = await query.edit_message_text(text="Playlist is empty, nothing i can do.")
-            context.job_queue.run_once(delete_message, 10, data={'message':message})
-            return
-
-        while len(playlist) > 0 and len(spotify_uri_list) < max_playlist_tracks:
-            item = random.choice(playlist)
-            playlist.remove(item)
-            spotify_uri_list.append(item['uri'])
-            
+        # get a random item from the list
+        # if item not already in playlist
+        # if item not in recent lastplayed
+        # how to prevent a short list
+        # llen = length of the list
+        # if item in recent last played llen - 1
+        # if item added to playlist llen - 1
+        # if llen == 0, no more items to get
+        # what is no items could be added at all
+        idxs = random.sample(range(0,result['total']),amount)
+        for idx in idxs:
+            result = sp.playlist_items(playlistid,offset=idx,limit=1)
+            for item in result['items']:
+                spotify_uri_list.append(item['track']['uri'])            
     else:
         # add a single track to the list
         # TODO validate the input
-        spotify_uri_list = [qdata]    
+        spotify_uri_list = [qdata]
+        await query.delete_message()
 
     payment_required = True
-    amount_to_pay = int(price + (len(spotify_uri_list) - 1) * price / 2)
+    amount_to_pay = int(price * len(spotify_uri_list))
     
     if amount_to_pay == 0:
         payment_required = False
-    else:
-        if addtobalance(userid,-1 * abs(amount_to_pay)) == True:
-            print("Sufficient credits")            
-            payment_required = False
-        
+
+    # if no payment required
     if payment_required == False:
-        try:
-            for item in spotify_uri_list:
-                sp.add_to_queue(item)
-
-            if len(spotify_uri_list) == 1:
-                await context.bot.send_message(
-                    chat_id=telegram_chat_id,
-                    text="@{username} added '{title}' to the queue".format(
-                        username=update.effective_user.username,
-                        title=getTrackTitle(sp.track(spotify_uri_list[0]))
-                    ))
-                if str(update.effective_chat.id) != str(telegram_chat_id):
-                    await context.bot.send_message(
-                        chat_id=update.effective_chat.id,
-                        text="Added '{title}' to the queue".format(
-                            title=getTrackTitle(sp.track(spotify_uri_list[0]))
-                        ))
-            else:
-                await context.bot.send_message(
-                    chat_id=telegram_chat_id,
-                    text="@{username} added a playlist to the queue".format(
-                        username=update.effective_user.username
-                    ))
-                if str(update.effective_chat.id) != str(telegram_chat_id):
-                    await context.bot.send_message(
-                        chat_id=update.effective_chat.id,
-                        text="Added playlist to the queue")
-                
-        except spotipy.exceptions.SpotifyException:
-            await context.bot.send_message(
-                chat_id=telegram_chat_id,
-                text="Could not add track to the queue. Player unavailable."
-            )
-        finally:
-            await query.delete_message()
-            return                
-
-    # create an order
-    order = {
-        'type': 'add_to_queue',
-        'timestamp': int(time()),
-        'spotify_uri': spotify_uri_list,
-        'userid': update.effective_user.id,
-        'price': amount_to_pay,
-        'username': update.effective_user.username,
-        'chat_id': update.effective_chat.id
-    }
-    
-    orderid = ''.join(random.choice(string.ascii_letters) for i in range(8))
-    order['id'] = orderid
+        await add_to_queue(context,spotify_uri_list,update.effective_user.username,telegram_chat_id)
+        await query.delete_message()
+        return
 
 
+        
+    # create a title for the order
+    title = getTrackTitle(sp.track(spotify_uri_list[0]))
     if len(spotify_uri_list) > 1:
-        order['title'] = '{num} tracks by @{username}'.format(
-            username=update.effective_user.username,
-            num=len(spotify_uri_list))
-    else:
-        title = getTrackTitle(sp.track(spotify_uri_list[0]))
-        order['title'] = title
+        title = "random tracks from a playlist"
 
-    lnbits_id = await lnbits_create_lnurlp(order['id'],order['title'],order['price'],order['price'])
-    order['lnbits_id'] = lnbits_id
-    order['paylink'] = "https://{host}{path}{id}".format(id=order['lnbits_id'],host=lnbits_host,path=lnbits_lnurlp_path)        
+    # create an invoice
+    invoice = await lnbits.createinvoice(lnbits_invoice_key,amount_to_pay,title)
     
+    # get the user wallet
+    user_adminkey = await get_user_adminkey(update.effective_user.id)
     
-    buttons = []
-    if len(spotify_uri_list) == 1 and str(update.effective_chat.id) != str(telegram_chat_id):
-        buttons.append([                
-            InlineKeyboardButton("Add to playlist",callback_data="{userid}:ADDTOPLAYLIST:{spotify_uri[0]}".format(**order))
-        ])
-    buttons.append([
-        InlineKeyboardButton("Pay {price} sats".format(**order),url=order['paylink'])
-    ])
+    # pay the invoice
+    payment_result = await lnbits.payinvoice(invoice['payment_request'],user_adminkey)
+    if payment_result['result'] == True:
+        await add_to_queue(context,spotify_uri_list,update.effective_user.username,update.effective_chat.id)
+        return
 
-    text = ""
-    if len(spotify_uri_list) == 1:
-        text = "@{username} Add '{title}'?".format(**order) 
-    else:
-        text = "I selected the following {number} of tracks. Add them to the queue?\n".format(number=len(spotify_uri_list))
-        for item in spotify_uri_list:
-            text += "{title}\n".format(title=getTrackTitle(sp.track(item)))
+    # get payment link for the user
+    user_lnurlp = await get_user_lnurlp(update.effective_user.id,update.effective_user.username)
 
-
+    # get balance for user
+    balance = await lnbits.getbalance(await get_user_invoicekey(update.effective_user.id))
+        
+    # we failed paying the invoice, popup the lnurlp
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=text,
-        reply_markup=InlineKeyboardMarkup(buttons))
-    context.job_queue.run_once(expire_order, 300, data={'orderid':order['id']})
-    order['messageid'] = message.id
-
-    
-    with open(os.path.join(open_orders_path,"{id}.json".format(**order)), 'w') as outfile:
-        json.dump(order, outfile)
-    await query.delete_message()
-
+        text=f"@{update.effective_user.username} add '{title}' to the play queue?\n\nYou have to fund your balance with at least <b>{amount_to_pay - balance}</b> sats to add '{title}' to the queue.\n\nSats paid in excess will not be lost and are added to your balance to pay for additional tracks.",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton(f"Open payment link",url=user_lnurlp),
+            InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))
+        ]]))
     
 
-# do the actual payment processing
-async def process_payment(context: ContextTypes.DEFAULT_TYPE,filename: str):
-    global done_orders_path
-
-    print("process payment")
-    with open(filename) as file:
-        order = json.load(file)
-
-        if 'type' in order and order['type'] == 'fund':
-            print("funding order")
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    "https://{host}/api/v1/payments?limit=20".format(host=lnbits_host),
-                    headers={'X-Api-Key':lnbits_api_key})
-                result = response.json()
-                for item in result:
-                    if item['pending'] == True:
-                        continue
-
-                    if 'extra' not in item:
-                        continue
-
-                    if 'tag' not in item['extra']:
-                        continue
-
-                    if item['extra']['tag'] != 'lnurlp':
-                        continue
-
-                    if 'link' not in item['extra']:
-                        continue
-
-                    if item['extra']['link'] != order['lnbits_id']:
-                        continue
-
-                    addtobalance(order['userid'],int(item['amount'] / 1000))
-
-                    async with httpx.AsyncClient() as client:
-                        await client.delete(
-                            "https://{host}/lnurlp/api/v1/links/{payid}".format(host=lnbits_host,payid=order['lnbits_id']),
-                            headers={'X-Api-Key':lnbits_api_key})
-                    
-                    try:
-                        shutil.move(filename,done_orders_path)
-                    except shutil.Error:
-                        pass
-
-                    try:
-                        await context.bot.delete_message(order['chat_id'],order['messageid'])
-                    except:
-                        pass
-
-                    await context.bot.send_message(chat_id=telegram_chat_id,text="@{username} wallet funded.".format(**order))
-                    await context.bot.send_message(chat_id=order['userid'],text="Wallet is funded with {amount} sats. Type /balance to view your balance".format(amount = int(item['amount']/1000)))                    
-            return
-
-            
-        try:
-            for item in order['spotify_uri']:
-                sp.add_to_queue(item)
+    # create a job to check the invoice
+    context.job_queue.run_once(callback_check_invoice, 5, data={
+        'payment_request':invoice['payment_request'],
+        'payment_hash': invoice['payment_hash'],
+        'invoicekey': lnbits_invoice_key,
+        'adminkey':user_adminkey,
+        'spotify_uri_list':spotify_uri_list,
+        'message_id':message.id,
+        'amount_to_pay': amount_to_pay,
+        'title': title,
+        'chat_id':update.effective_chat.id,
+        'username':update.effective_user.username,
+        'userid':update.effective_user.id,
+        'timeout': 180,
+        'lnurlp':user_lnurlp
+        })
         
-            try:
-                shutil.move(filename,done_orders_path)
-            except shutil.Error:
-                pass
-                    
-            try:
-                await context.bot.delete_message(order['chat_id'],order['messageid'])
-            except:
-                pass
-            await context.bot.send_message(chat_id=telegram_chat_id,text="@{username} added '{title}' to the queue".format(**order))
-            if str(telegram_chat_id) != str(order['chat_id']):
-                await context.bot.send_message(chat_id=order['chat_id'],text="Added '{title}' to the queue".format(**order))
-                        
-            async with httpx.AsyncClient() as client:
-                await client.delete(
-                    "https://{host}/lnurlp/api/v1/links/{payid}".format(host=lnbits_host,payid=order['lnbits_id']),
-                    headers={'X-Api-Key':lnbits_api_key})
-            
-        except spotipy.exceptions.SpotifyException:
-            logging.info("Player is not available")
-            await context.bot.send_message(
-                chat_id=order['chat_id'],
-                text="Could not add '{title}' to the queue. Player unavailable.".format(**order))                    
-
-async def callback_message(update: Update, context: CallbackContext) -> None:
-    print(update.message.text)
-    
-    if str(update.message.chat_id) == str(telegram_chat_id):        
-        return
-
-    
-    result = sp.search(update.message.text)
-    
-    if len(result['tracks']['items']) > 0:
-        tracktitles  = {}
-        button_list = []
-        for item in result['tracks']['items']:            
-            title = getTrackTitle(item)
-            if title not in tracktitles:
-                tracktitles[title] = 1
-                button_list.append([InlineKeyboardButton(title, callback_data = "{id}:{uri}".format(id=update.effective_user.id,uri=item['uri']))])
-
-                # max five suggestions
-                if len(tracktitles) == 5:
-                    break
-
-        # Add a cancel button to the list
-        button_list.append([InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))])
-
-        message = await context.bot.send_message(
-            chat_id=update.message.chat_id,
-            text="Results: ",
-            reply_markup=InlineKeyboardMarkup(button_list))
-
-        # start a job to kill the search window after 30 seconds if not used
-        context.job_queue.run_once(delete_message, 30, data={'message':message})
-    else:
-        message = await context.bot.send_message(chat_id=update.message.chat_id,text="No results")
-        context.job_queue.run_once(delete_message, 10, data={'message':message})
-        
-    # delete the original message
-    await update.message.delete()
-
-
-
-            
-# callback that checks when a payment is made
-async def callback_payments(context: ContextTypes.DEFAULT_TYPE):
-    global telegram_chat_id
-    
-    files = os.listdir(paid_orders_path)
-    for filename in files:
-        fname = os.path.join(paid_orders_path, filename)
-        if os.path.isfile(fname):
-            logging.info("New payment {}".format(filename))
-            await process_payment(context,fname)
-
-
-# callback that checks when a payment is made
-async def callback_stuckpayments(context: ContextTypes.DEFAULT_TYPE):
-    global lnbits_host, lnbits_api_key
-    
-    # return if no open orders
-    files = os.listdir(open_orders_path)
-    if len(files) == 0:
-        return
-    
-    # make HTTP call to lnbits to check payment status
-    lnbits_ids = []
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            "https://{host}/api/v1/payments?limit=50".format(host=lnbits_host),
-            headers={'X-Api-Key':lnbits_api_key})
-        result = response.json()
-        for item in result:
-            if item['pending'] == True:
-                continue
-            
-            if 'extra' not in item:
-                continue
-            
-            if 'tag' not in item['extra']:
-                continue
-            
-            if item['extra']['tag'] != 'lnurlp':
-                continue
-                    
-            lnbits_ids.append(item['extra']['link'])
-
-    for filename in files:
-        fname = os.path.join(open_orders_path, filename)
-        if os.path.isfile(fname):
-            logging.info("Verifying payment {}".format(filename))
-
-            order = None
-            with open(fname) as file:                
-                order = json.load(file)
-
-        
-            if order is not None:
-                print(order)
-                if order['lnbits_id'] in lnbits_ids:
-                    shutil.move(fname,paid_orders_path)
-
-                    # process the next order
-                    continue
-
-                
-                expired = False
-                if 'timestamp' in order:
-                    if time() > (order['timestamp'] + 1800):
-                        expired = True
-                else:
-                    expired = True    
-
-                if expired:
-                    context.job_queue.run_once(expire_order, 1, data={'orderid':order['id']})
-
-
-
-                
+                           
 if __name__ == "__main__":
     
     """Run bot."""
-    #config = uvicorn.Config("main:app", port=6000, log_level="info")
-    #server = uvicorn.Server(config)
-    
     application = Application.builder().token(telegram_token).build()    
     # Create the Application and pass it your bot's token.
     
@@ -975,8 +757,8 @@ if __name__ == "__main__":
     
     # Run the bot until the user presses Ctrl-C
     
-    application.add_handler(CommandHandler(["start", "help","info","correcthorsebatterystaple"], start))
-    application.add_handler(CommandHandler(['add','play','adr','ade','adf','adc','adx','ads','ads'], play))
+    application.add_handler(CommandHandler(["start", "help"], start))
+    application.add_handler(CommandHandler(['add'], play))
     application.add_handler(CommandHandler('queue', queue))
     application.add_handler(CommandHandler('price', play_price))
     application.add_handler(CommandHandler('enable', enable))
@@ -984,14 +766,16 @@ if __name__ == "__main__":
     application.add_handler(CommandHandler('history', history))
     application.add_handler(CommandHandler('dj', deejay))
     application.add_handler(CommandHandler('fund',fund))
-    application.add_handler(CommandHandler('balance', balance,~ filters.Chat(int(telegram_chat_id))))
-    application.add_handler(CommandHandler('playlist', playlist)) #,~ filters.Chat(int(telegram_chat_id))))
-    application.add_handler(MessageHandler(~ filters.Chat(int(telegram_chat_id)),callback_message))
+    application.add_handler(CommandHandler('link',link))
+    application.add_handler(CommandHandler('balance', balance))
+    application.add_handler(CommandHandler('connect_player', connect_player))
+    application.add_handler(CommandHandler('pay_invoice', pay_invoice))
+    #application.add_handler(MessageHandler(~ filters.Chat(int(telegram_chat_id)),callback_message))
 
     application.add_handler(CallbackQueryHandler(callback_button))
     application.job_queue.run_once(callback_spotify, 1)
-    application.job_queue.run_repeating(callback_payments, 5)
-    application.job_queue.run_repeating(callback_stuckpayments, 30)
+    #application.job_queue.run_repeating(callback_payments, 5)
+    #application.job_queue.run_repeating(callback_stuckpayments, 30)
 
 
     application.run_polling()
