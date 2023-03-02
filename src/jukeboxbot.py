@@ -792,18 +792,18 @@ async def main() -> None:
     application.bot_data["url"] = settings.bot_url
 
     # register handlers
-    application.add_handler(CommandHandler('search', search))
-    application.add_handler(CommandHandler('balance', balance))
-    application.add_handler(CommandHandler('connect', connect)) # in both private and public chats
-    application.add_handler(CommandHandler('fund',fund))
-    application.add_handler(CommandHandler('history', history))
-    application.add_handler(CommandHandler('link',link))
-    application.add_handler(CommandHandler('pay', pay)) # only in private chat
-    application.add_handler(CommandHandler('queue', queue))
-    application.add_handler(CommandHandler("setclientsecret",spotify_settings))    # TODO only in private chat
-    application.add_handler(CommandHandler("setclientid",spotify_settings))  # TODO only in private chat
-    application.add_handler(CommandHandler(["start","help"],start))    
-    application.add_handler(CommandHandler(['dj','zap'], zap))            
+    application.add_handler(CommandHandler('add', search))  # search for a track
+    application.add_handler(CommandHandler('balance', balance)) # view wallet balance
+    application.add_handler(CommandHandler('connect', connect)) # connect to spotify account
+    application.add_handler(CommandHandler('fund',fund)) # add funds to wallet
+    application.add_handler(CommandHandler('history', history)) # view history of tracks
+    application.add_handler(CommandHandler('link',link)) # view LNDHUB QR 
+    application.add_handler(CommandHandler('pay', pay)) # pay a lightning invoice
+    application.add_handler(CommandHandler('queue', queue)) # view the queue
+    application.add_handler(CommandHandler("setclientsecret",spotify_settings)) # set the secret for a spotify app
+    application.add_handler(CommandHandler("setclientid",spotify_settings))  # set the clientid or a spotify app
+    application.add_handler(CommandHandler(["start","help"],start))  # help message
+    application.add_handler(CommandHandler(['dj','zap'], zap))  # pay another user
 #    application.add_handler(TypeHandler(type=WebhookUpdate, callback=webhook_update))
 
     # Pass webhook settings to telegram
