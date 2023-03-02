@@ -1,5 +1,6 @@
 import json
 
+
 class User:
     def __init__(self, tguserid, tgusername):
         self.userid = tguserid
@@ -42,15 +43,19 @@ class User:
 class SpotifySettings:
     def __init__(self, tguserid):
         self.userid = tguserid
+        self.chatid = None
         self.userkey = f"user:{self.userid}"        
         self.client_secret = None
         self.client_id = None
+        self.token = None
 
     def toJson(self):
         data = {
             'telegram_userid': self.userid,
             'client_secret': self.client_secret,
-            'client_id': self.client_id
+            'client_id': self.client_id,
+            'token': self.token,
+            'chatid': self.chatid
         }
         return json.dumps(data)
 
@@ -65,4 +70,10 @@ class SpotifySettings:
 
         if 'client_id' in obj:
             self.client_id = obj['client_id']
+
+        if 'token' in obj:
+            self.token = obj['token']
     
+        if 'chatid' in obj:
+            self.chatid = obj['token']
+            
