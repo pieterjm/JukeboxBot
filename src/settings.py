@@ -2,6 +2,8 @@ import redis
 import logging
 from lnbits import LNbits
 import os
+import random
+import string
 
 def init():
     global environment
@@ -15,8 +17,11 @@ def init():
     global bot_url
     global bot_token
     global delete_message_timeout_short
-
-
+    global delete_message_timeout_medium
+    global delete_message_timeout_long
+    global secret_token
+    global qrcode_path
+    
     # set the new environment and fall back to development
     env = 'development'
     if 'JUKEBOX_ENV' in os.environ:
@@ -33,7 +38,9 @@ def init():
     delete_message_timeout_short = 10
     delete_message_timeout_medium = 60
     delete_message_timeout_long = 300
-    
+
+    # set secret token for telegram
+    secret_token = "".join(random.sample(string.ascii_letters,12))
 
     environment = env
     if env == 'production':
@@ -51,7 +58,8 @@ def init():
         lnbits_public_host='lnbits.wholestack.nl'
         spotify_redirect_uri=os.environ['MY_SPOTIPY_REDIRECT_URI']
         bot_token = os.environ['BOT_TOKEN']
-        
+        qrcode_path= '/tmp'
+
         logging.basicConfig(
             filename="logfile_{time}.dat".format(time=time()),
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -75,8 +83,8 @@ def init():
             '47ddeb21c32a46ac82c7eacb482020cb')
         spotify_redirect_uri='http://localhost:8080/'
         bot_url="https://bot.wholestack.nl/"
-        bot_token="6249016860:AAEBWywfONRT_GsTNt5l1ZfCcBuwk48hins"
-        
+        bot_token="6163071450:AAGRq9Jo9eAgYo6EepzsT0SmWSA3snVR9ns"
+        qrcode_path = '/tmp'
         logging.basicConfig(
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             level=logging.INFO

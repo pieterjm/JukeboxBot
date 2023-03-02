@@ -14,7 +14,7 @@ import redis
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response
+from starlette.responses import PlainTextResponse, Response, RedirectResponse
 from starlette.routing import Route
 
 from telegram import __version__ as TG_VER
@@ -48,6 +48,10 @@ from telegram.ext import (
     ContextTypes,
     ExtBot,
     TypeHandler,
+    CallbackQueryHandler,
+    CallbackContext,
+    MessageHandler,
+    filters    
 )
 
 # import all local stuff
@@ -60,6 +64,12 @@ import settings
 
 
 settings.init()
+
+# the local cache of messages that disply current playing track
+now_playing_message = {}
+
+# message debouncer to prevent processing the same message twice
+message_debounce = {}
 
 @dataclass
 class WebhookUpdate:
@@ -98,6 +108,13 @@ async def delete_message(context: ContextTypes.DEFAULT_TYPE):
     
 # start command handler, returns help information
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # debounce to prevent the same message being processed twice
+    if update.effective_chat.id in message_debounce and update.message.id <= message_debounce[update.effective_chat.id]:
+        logging.info("Message bounced")
+        return
+    else:
+        message_debounce[update.effective_chat.id] = update.message.id
+
     text = """You can use one of the following commands:
 
  /start and /help both result in this output
@@ -115,7 +132,7 @@ You can also chat in private with me to do stuff like viewing your balance.
 The NOSTR pubkey of NoderunnersFM is: npub1ua6fxn9ktc4jncanf79jzvklgjftcdrt5etverwzzg0lgpmg3hsq2gh6v6
 """           
     # send the message
-    message = await context.bot.send_message(chat_id=update.message.chat_id,text=text)
+    message = await context.bot.send_message(chat_id=update.effective_chat.id,text=text)
 
     # only create a callback to delete the message when not in a private chat
     if update.message.chat.type != "private":
@@ -127,6 +144,14 @@ The NOSTR pubkey of NoderunnersFM is: npub1ua6fxn9ktc4jncanf79jzvklgjftcdrt5etve
 
 # get the current balance
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # debounce to prevent the same message being processed twice
+    if update.effective_chat.id in message_debounce and update.message.id <= message_debounce[update.effective_chat.id]:
+        logging.info("Message bounced")
+        return
+    else:
+        message_debounce[update.effective_chat.id] = update.message.id
+    
+    
     # do not show balance in other than private chats
     if update.message.chat.type != "private":
         bot_me = await context.bot.get_me()
@@ -159,6 +184,13 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # Connect a spotify player to the bot, the connect command
 async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # debounce to prevent the same message being processed twice
+    if update.effective_chat.id in message_debounce and update.message.id <= message_debounce[update.effective_chat.id]:
+        logging.info("Message bounced")
+        return
+    else:
+        message_debounce[update.effective_chat.id] = update.message.id
+
     # get spotify settings for the user
     sps = await spotifyhelper.get_spotify_settings(update.effective_user.id)    
     
@@ -244,14 +276,21 @@ async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # display the play queue
 async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # debounce to prevent the same message being processed twice
+    if update.effective_chat.id in message_debounce and update.message.id <= message_debounce[update.effective_chat.id]:
+        logging.info("Message bounced")
+        return
+    else:
+        message_debounce[update.effective_chat.id] = update.message.id
+
     if update.message.chat.type == "private":
         return
     
     # get an auth managher, if no auth manager is available, dump a message
-    await spotifyhelper.get_auth_manager(update.message.chat_id)
+    auth_manager = await spotifyhelper.get_auth_manager(update.message.chat_id)
     if auth_manager is None:
         message = await context.bot.send_message(
-            chat_id=update.message.chat_id,
+            chat_id=update.effective_chat.id,
             parse_mode='HTML',
             text="Bot not connected to player. The admin should perform the /connect command to authorize the bot.")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
@@ -264,7 +303,7 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     track = sp.current_user_playing_track()
     title = "Nothing is playing at the moment"    
     if track:                    
-        title = "🎵 {title} 🎵".format(title=getTrackTitle(track['item']))
+        title = "🎵 {title} 🎵".format(title=spotifyhelper.get_track_title(track['item']))
     
     # query the queue 
     result = sp.queue()
@@ -272,7 +311,7 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = ""
     for i in range(min(10,len(result['queue']))):
         item = result['queue'][i]       
-        text += " {count}. {title}\n".format(count=(i+1),title=getTrackTitle(item))
+        text += " {count}. {title}\n".format(count=(i+1),title=spotifyhelper.get_track_title(item))
 
     if len(text) == 0:
         text = title + "\nNo items in queue."
@@ -286,6 +325,13 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
 # connect a spotify player to the bot, the setclient secret and set client id commands
 async def spotify_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # debounce to prevent the same message being processed twice
+    if update.effective_chat.id in message_debounce and update.message.id <= message_debounce[update.effective_chat.id]:
+        logging.info("Message bounced")
+        return
+    else:
+        message_debounce[update.effective_chat.id] = update.message.id
+
     if update.message.chat.type != "private":
         bot_me = await context.bot.get_me()
         print(f"https://t.me/{bot_me.username}")
@@ -333,6 +379,13 @@ async def spotify_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 # fund the wallet of the user
 async def fund(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # debounce to prevent the same message being processed twice
+    if update.effective_chat.id in message_debounce and update.message.id <= message_debounce[update.effective_chat.id]:
+        logging.info("Message bounced")
+        return
+    else:
+        message_debounce[update.effective_chat.id] = update.message.id
+
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
 
     message = await context.bot.send_message(
@@ -349,11 +402,18 @@ async def fund(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # view the history of recently played tracks
 async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # debounce to prevent the same message being processed twice
+    if update.effective_chat.id in message_debounce and update.message.id <= message_debounce[update.effective_chat.id]:
+        logging.info("Message bounced")
+        return
+    else:
+        message_debounce[update.effective_chat.id] = update.message.id
+
     if update.message.chat.type == "private":
         return
     
     # get an auth managher, if no auth manager is available, dump a message
-    await spotifyhelper.get_auth_manager(update.message.chat_id)
+    auth_manager = await spotifyhelper.get_auth_manager(update.message.chat_id)
     if auth_manager is None:
         message = await context.bot.send_message(
             chat_id=update.message.chat_id,
@@ -366,9 +426,9 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     sp = spotipy.Spotify(auth_manager=auth_manager)
         
     text = "Track history:\n"
-    historykey = f"history:{telegram_chat_id}"
-    for i in range(0, min(20,rds.llen(historykey))):
-        title = rds.lindex(historykey, i).decode('utf-8')
+    historykey = f"history:{update.message.chat_id}"
+    for i in range(0, min(20,settings.rds.llen(historykey))):
+        title = settings.rds.lindex(historykey, i).decode('utf-8')
         text += f"{title}\n"            
 
     message = await context.bot.send_message(chat_id=update.message.chat_id,text=text)    
@@ -379,6 +439,13 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
 # get lndhub link for user
 async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # debounce to prevent the same message being processed twice
+    if update.effective_chat.id in message_debounce and update.message.id <= message_debounce[update.effective_chat.id]:
+        logging.info("Message bounced")
+        return
+    else:
+        message_debounce[update.effective_chat.id] = update.message.id
+
     # create a message tyo do this in a private chat
     if update.message.chat.type != "private":
         bot_me = await context.bot.get_me()
@@ -398,12 +465,12 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
 
     # create QR code for the link    
-    filename = userhelper.get_qrcode_filename(lndhublink)
+    filename = userhelper.get_qrcode_filename(user.lndhub)
     with open(filename,'rb') as file:
         message = await context.bot.send_photo(
             update.message.chat_id,
             file,
-            caption=f"Scan this QR code with an lndhub compatible wallet like BlueWallet or Zeus. Your lndhub link is:\n<pre>{user.lndhublink}</pre>",
+            caption=f"Scan this QR code with an lndhub compatible wallet like BlueWallet or Zeus. Your lndhub link is:\n<pre>{user.lndhub}</pre>",
             parse_mode='HTML')
 
     # delete the original command
@@ -411,6 +478,13 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # pay a lightning invoice
 async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # debounce to prevent the same message being processed twice
+    if update.effective_chat.id in message_debounce and update.message.id <= message_debounce[update.effective_chat.id]:
+        logging.info("Message bounced")
+        return
+    else:
+        message_debounce[update.effective_chat.id] = update.message.id
+
     result = re.search("/pay\s+(lnbc[a-z0-9]+)\s*$",update.message.text)
     if result is None:
         await context.bot.send_message(
@@ -437,13 +511,23 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text="Payment failed.")
 
 # search for a track
+# TODO: no response in private chats
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     This function searches for tracks in spotify and createas a list of tracks to play
     If a playlist URL is provided, that playlist is used
     This function only works in a group chat
     """
+    # debounce to prevent the same message being processed twice
+    if update.effective_chat.id in message_debounce and update.message.id <= message_debounce[update.effective_chat.id]:
+        logging.info("Message bounced")
+        return
+    else:
+        message_debounce[update.effective_chat.id] = update.message.id
+
+    
     if update.message.chat.type == "private":
+        # TODO: send a message in the private chat to use the command in the group chat
         return
     
     # get an auth managher, if no auth manager is available, dump a message
@@ -477,7 +561,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=update.message.chat_id,
             text=f"@{update.effective_user.username} suggests to play tracks from the '{result['name']}' playlist.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton(f"Pay {price} sats for a random track", callback_data = f"0:PLAYRANDOM:{playlistid}"),
+                InlineKeyboardButton(f"Pay {settings.price} sats for a random track", callback_data = f"0:PLAYRANDOM:{playlistid}"),
             ]]))
 
         # start a job to kill the message  after 30 seconds if not used
@@ -496,7 +580,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         tracktitles  = {}
         button_list = []
         for item in result['tracks']['items']:            
-            title = getTrackTitle(item)
+            title = spotifyhelper.get_track_title(item)
             if title not in tracktitles:
                 tracktitles[title] = 1
                 button_list.append([InlineKeyboardButton(title, callback_data = f"{update.effective_user.id}:{item['uri']}")])
@@ -528,13 +612,23 @@ async def zap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Send sats from one user to another
     """
+    # debounce to prevent the same message being processed twice
+    if update.effective_chat.id in message_debounce and update.message.id <= message_debounce[update.effective_chat.id]:
+        logging.info("Message bounced")
+        return
+    else:
+        message_debounce[update.effective_chat.id] = update.message.id
+
     # verify that this is not a private chat
     # verify that the message is a reply
     if update.message.reply_to_message is None or update.message.chat.type != "private":
         message = await context.bot.send_message(
             chat_id=update.message.chat_id,
             text=f"The /zap of /dj command only works in a group chat as a reply to another user. If no amount is specified, the price for a track, {settings.price} is sent.")
-        await update.message.delete()
+        try:
+            await update.message.delete()
+        except:
+            logging.warning("Could not delete message")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
         return
 
@@ -593,7 +687,7 @@ async def zap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def callback_check_invoice(context: ContextTypes.DEFAULT_TYPE):
     
     # check if the invoice has been paid
-    if await settings.lnbits.checkInvoice(settings.lnbits._admin_invoicekey,context.job.data['payment_hash']) == true:
+    if await settings.lnbits.checkInvoice(settings.lnbits._admin_invoicekey,context.job.data['payment_hash']) == True:
         auth_manager = await spotify_helper.get_auth_manager(context.job.data['chat_id'])
         if auth_manager is None:
             logging.error("No auth manager after succesfull payment")
@@ -623,6 +717,55 @@ async def callback_check_invoice(context: ContextTypes.DEFAULT_TYPE):
         interval = 5
         context.job.data['timeout'] -= interval            
         context.job_queue.run_once(callback_check_invoice, interval, data=context.job.data)
+
+async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
+    # iterate over all auth managers
+    for key in settings.rds.scan_iter("authmanager:*"):
+        chat_id = key.decode('utf-8').split(':')[1]
+        auth_manager = await spotifyhelper.get_auth_manager(chat_id)
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+        currenttrack = sp.current_user_playing_track()
+
+
+        title = "Nothing playing at the moment"
+        if currenttrack:
+            title = spotifyhelper.get_track_title(currenttrack['item'])
+
+            # update and prune recent history
+            historykey = f"history:{chat_id}"
+            rds_title = settings.rds.lindex(historykey,0)
+            if rds_title is None:
+                settings.rds.lpush(historykey,title)
+            else:
+                rds_title = rds_title.decode('utf-8')
+                if rds_title != title:
+                    settings.rds.lpush(historykey,title)
+                    
+                if settings.rds.llen(historykey) > 100:
+                    settings.rds.rpop(historykey)
+                    
+            # update last played entry
+            settings.rds.hset(f"lastplayed:{chat_id}",title,int(time()))
+
+        # update the title
+        if chat_id in now_playing_message:
+            [message_id, prev_title] = now_playing_message[chat_id]
+            if prev_title != title:
+                try:            
+                    await context.bot.editMessageText(title,chat_id=chat_id,message_id=message_id)
+                    now_playing_message[chat_id] = [ message_id, title ]
+                    return
+                except:
+                    logging.info("Exception when refreshing now playing")
+                    pass
+        else:
+            message = await context.bot.send_message(text=title,chat_id=chat_id)
+            await context.bot.pin_chat_message(chat_id=chat_id, message_id=message.id)
+            now_playing_message[chat_id] = [ message.id, title ]
+       
+
+    
+    
     
             
 #callback for button presses
@@ -658,7 +801,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # the commands from here on modify a list of tracks to be queue
     # and we have to check hat we have spotify available
     # get an auth managher, if no auth manager is available, dump a message
-    await spotifyhelper.get_auth_manager(update.effective_chat.id)
+    auth_manager = await spotifyhelper.get_auth_manager(update.effective_chat.id)
     if auth_manager is None:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -689,7 +832,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # validate payment conditions
     payment_required = True
-    amount_to_pay = int(price * len(spotify_uri_list))    
+    amount_to_pay = int(settings.price * len(spotify_uri_list))    
     if amount_to_pay == 0:
         payment_required = False
             
@@ -707,9 +850,9 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 text=f"You added '{spotifyhelper.get_track_title(sp.track(item))}' to the queue.")
                 
     # create an invoice title
-    invoice_title = f"'{spotify_uri_list[0]}'"
+    invoice_title = f"'{spotifyhelper.get_track_title(sp.track(spotify_uri_list[0]))}'"
     for i in range(1,len(spotify_uri_list)):
-        title += f",'{spotify_uri_list[i]}'"
+        title += f",'{spotifyhelper.get_track_title(sp.track(spotify_uri_list[0]))}'"
 
     # create the invoice 
     invoice = await settings.lnbits.createInvoice(settings.lnbits._admin_invoicekey,amount_to_pay,invoice_title)
@@ -718,7 +861,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
 
     # pay the invoice
-    result = await settings.lnbits.payInvoice(invoice['payment_request'],user.adminkey)
+    payment_result = await settings.lnbits.payInvoice(invoice['payment_request'],user.adminkey)
 
     # if payment success
     if payment_result['result'] == True:
@@ -727,21 +870,18 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
-            text=f"@{update.effective_user.username} added {invoicetitle} to the queue.")
+            text=f"@{update.effective_user.username} added {invoice_title} to the queue.")
         await context.bot.send_message(
             chat_id=update.effective_user.id,
             parse_mode='HTML',
             text=f"You paid {amount_to_pay} sats for {invoice_title}.")
         return
             
-    # if payment fails, either fund the wallet or pay the invoice            
-    # get balance for user
-    balance = await settings.lnbits.getBalance(user.invoicekey)
         
     # we failed paying the invoice, popup the lnurlp
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"@{update.effective_user.username} add '{invoice_title}' to the queue?\n\nThen pay the invoice sats.",
+        text=f"@{update.effective_user.username} add '{invoice_title}' to the queue?\n\nThen pay the invoice of {amount_to_pay} sats.",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/redirect?url=lightning:{invoice['payment_request']}"),
@@ -757,7 +897,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         'invoice_title': invoice_title,
         'spotify_uri_list': spotify_uri_list,
         'message_id': message.id,
-        'chat_id': chat.id,
+        'chat_id': update.effective_chat.id,
         'timeout': 180        
         })
 
@@ -778,15 +918,14 @@ async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
                   
 async def main() -> None:
     """Set up the application and a custom webserver."""
-    url = "https://bot.wholestack.nl"
-    admin_chat_id = 6249016860
     port = 7000
 
-    context_types = ContextTypes(context=CustomContext)
+    #context_types = ContextTypes(context=CustomContext)
     # Here we set updater to None because we want our custom webhook server to handle the updates
     # and hence we don't need an Updater instance
     application = (
-        Application.builder().token(settings.bot_token).updater(None).context_types(context_types).build()
+        #Application.builder().token(settings.bot_token).updater(None).context_types(context_types).build()
+        Application.builder().token(settings.bot_token).updater(None).build()
     )
     # save the values in `bot_data` such that we may easily access them in the callbacks
     application.bot_data["url"] = settings.bot_url
@@ -803,20 +942,35 @@ async def main() -> None:
     application.add_handler(CommandHandler("setclientsecret",spotify_settings))    # TODO only in private chat
     application.add_handler(CommandHandler("setclientid",spotify_settings))  # TODO only in private chat
     application.add_handler(CommandHandler(["start","help"],start))    
-    application.add_handler(CommandHandler(['dj','zap'], zap))            
+    application.add_handler(CommandHandler(['dj','zap'], zap))
+    application.add_handler(CallbackQueryHandler(callback_button))
+    application.job_queue.run_repeating(callback_spotify, 10)
+        
 #    application.add_handler(TypeHandler(type=WebhookUpdate, callback=webhook_update))
 
     # Pass webhook settings to telegram
-    await application.bot.set_webhook(url=f"{url}/telegram")
+    await application.bot.set_webhook(
+        url=f"{settings.bot_url}/telegram",
+        allowed_updates=['callback_query','message'],
+        secret_token=settings.secret_token
+    )
 
     # Set up webserver
     async def telegram(request: Request) -> Response:
         """Handle incoming Telegram updates by putting them into the `update_queue`"""
-        await application.update_queue.put(
-            Update.de_json(data=await request.json(), bot=application.bot)
-        )
+        if 'X-Telegram-Bot-Api-Secret-Token' in request.headers:
+            if request.headers['X-Telegram-Bot-Api-Secret-Token'] == settings.secret_token:        
+                await application.update_queue.put(
+                    Update.de_json(data=await request.json(), bot=application.bot)
+                )
         return Response()
 
+    async def redirect_callback(request: Request) -> Response:
+        url = request.query_params["url"]
+        if url.startswith("lightning:lnbc"):
+            return RedirectResponse(url = url)
+        else:
+            return Response()
 
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """ 
@@ -882,7 +1036,8 @@ async def main() -> None:
         routes=[
             Route("/telegram", telegram, methods=["POST"]),
             Route("/lnbitscallback", lnbits_lnurlp_callback, methods=["POST"]),
-            Route("/spotifycallback", spotify_callback, methods=["GET"])
+            Route("/spotifycallback", spotify_callback, methods=["GET"]),
+            Route("/redirect",redirect_callback, methods=["GET"])
         ]
     )
     
