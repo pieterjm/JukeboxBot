@@ -3,7 +3,7 @@ import logging
 from lnbits import LNbits
 import os
 
-def init(env):
+def init():
     global environment
     global rds
     global lnbits
@@ -15,7 +15,13 @@ def init(env):
     global bot_url
     global bot_token
     global delete_message_timeout_short
-    
+
+
+    # set the new environment and fall back to development
+    env = 'development'
+    if 'JUKEBOX_ENV' in os.environ:
+        env = os.environ['JUKEBOX_ENV']
+        
     # already initialised for this environment
     try:
         if environment == env:
@@ -29,7 +35,7 @@ def init(env):
     delete_message_timeout_long = 300
     
 
-    environment = env        
+    environment = env
     if env == 'production':
         rds = redis.Redis(db=0)
         price = os.environ['REQUEST_PRICE']

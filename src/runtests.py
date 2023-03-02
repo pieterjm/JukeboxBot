@@ -14,20 +14,20 @@ class TestJukeboxBot(unittest.TestCase):
         """
         Test initialising the settings
         """
-        self.assertEqual(settings.init('development'),True)
+        self.assertEqual(settings.init(),True)
     
     def test_no_wallets(self):
         """
         Test if there are no user/wallets present
         """
-        self.assertEqual(settings.init('development'),True)
+        self.assertEqual(settings.init(),True)
         self.assertEqual(len(asyncio.run(settings.lnbits.getWallets())),0)
 
     def test_extensions(self):
         """
         Test creation and deletion of a wallet
         """
-        self.assertEqual(settings.init('development'),True)
+        self.assertEqual(settings.init(),True)
         self.assertEqual(len(asyncio.run(settings.lnbits.getWallets())),0)
         # create a user and a wallet
         lnbitsuserid = asyncio.run(settings.lnbits.createUser(userkey1))
@@ -49,7 +49,7 @@ class TestJukeboxBot(unittest.TestCase):
         """
         Test the retrieval of some wallet
         """
-        self.assertEqual(settings.init('development'),True)
+        self.assertEqual(settings.init(),True)
         self.assertEqual(len(asyncio.run(settings.lnbits.getWallets())),0)
         lnbitsuserid = asyncio.run(settings.lnbits.createUser(userkey1))
 
@@ -67,7 +67,7 @@ class TestJukeboxBot(unittest.TestCase):
         """
         Create a testtransaction
         """
-        self.assertEqual(settings.init('development'),True)
+        self.assertEqual(settings.init(),True)
         self.assertEqual(len(asyncio.run(settings.lnbits.getWallets())),0)
 
         # test is there is some sats in the balance of the admin
@@ -137,7 +137,7 @@ class TestJukeboxBot(unittest.TestCase):
         settings.rds.hdel("user:654321","userdata")
                 
         # test all preconditions
-        self.assertEqual(settings.init('development'),True)
+        self.assertEqual(settings.init(),True)
         self.assertEqual(len(asyncio.run(settings.lnbits.getWallets())),0)
         self.assertEqual(len(asyncio.run(settings.lnbits.getUsers())),0)
         self.assertEqual(asyncio.run(settings.lnbits.getBalance(settings.lnbits._admin_invoicekey)),21)
@@ -185,7 +185,7 @@ class TestJukeboxBot(unittest.TestCase):
         settings.rds.hdel("user:654321","userdata")
 
         # test all preconditions
-        self.assertEqual(settings.init('development'),True)
+        self.assertEqual(settings.init(),True)
         self.assertEqual(len(asyncio.run(settings.lnbits.getWallets())),0)
         self.assertEqual(len(asyncio.run(settings.lnbits.getUsers())),0)
         self.assertEqual(asyncio.run(settings.lnbits.getBalance(settings.lnbits._admin_invoicekey)),21)

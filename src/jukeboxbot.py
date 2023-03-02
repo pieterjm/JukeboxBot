@@ -59,7 +59,7 @@ from spotifyhelper import SpotifySettings, CacheJukeboxHandler
 import settings
 
 
-settings.init('development')
+settings.init()
 
 @dataclass
 class WebhookUpdate:
@@ -477,7 +477,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=update.message.chat_id,
             text=f"@{update.effective_user.username} suggests to play tracks from the '{result['name']}' playlist.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton(f"Pay {price} sats for a random track", callback_data = f"0:PLAYRANDOM:{playlistid}:1"),
+                InlineKeyboardButton(f"Pay {price} sats for a random track", callback_data = f"0:PLAYRANDOM:{playlistid}"),
             ]]))
 
         # start a job to kill the message  after 30 seconds if not used
@@ -585,9 +585,197 @@ async def zap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text=f"Zap failed. Sorry.")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
 
-        [# delete the message
+        # delete the message
         await update.message.delete()
+
+
+# periodic check for a paid invoice            
+async def callback_check_invoice(context: ContextTypes.DEFAULT_TYPE):
     
+    # check if the invoice has been paid
+    if await settings.lnbits.checkInvoice(settings.lnbits._admin_invoicekey,context.job.data['payment_hash']) == true:
+        auth_manager = await spotify_helper.get_auth_manager(context.job.data['chat_id'])
+        if auth_manager is None:
+            logging.error("No auth manager after succesfull payment")
+            return
+
+        # add to the queue and inform others
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+        for uri in spotify_uri_list:
+            sp.add_to_queue(item)            
+        await context.bot.send_message(
+            chat_id=context.job.data['chat_id'],
+            parse_mode='HTML',
+            text=f"@{context.job.data['username']} added {context.job.data['invoice_title']} to the queue.")
+        await context.bot.send_message(
+            chat_id=context.job.data['user_id'],
+            parse_mode='HTML',
+            text=f"You paid {context.job.data['amount_to_pay']} sats for {context.job.data['invoice_title']}.")
+
+        # delete the payment request message
+        await context.bot.delete_message(context.job.data['chat_id'],context.job.data['message_id'])
+        return
+
+    # not yet paid, reschedule job or forget about it after some time
+    if context.job.data['timeout'] <= 0:
+        await context.bot.delete_message(context.job.data['chat_id'],context.job.data['message_id'])
+    else:
+        interval = 5
+        context.job.data['timeout'] -= interval            
+        context.job_queue.run_once(callback_check_invoice, interval, data=context.job.data)
+    
+            
+#callback for button presses
+async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    This functions handles all button presses that are fed back into the application
+    """
+    query = update.callback_query
+
+    # CallbackQueries need to be answered, even if no notification to the user is needed    
+    # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery    
+    await query.answer()
+    
+    # parse the callback data.
+    # TODO: Should convert this into an access reference map pattern
+    userid, command = query.data.split(':',1)        
+
+    # only the user that requested the track can select a track
+    # or when the userid is explicitly set to 0
+    if int(userid) != 0 and str(userid) != str(update.effective_user.id):
+        logging.debug("Avoiding real click")
+        return
+    
+    # process the various commands
+    # cancel command
+    if command == 'CANCEL':
+        """
+        Cancel just deletes the message
+        """
+        await query.delete_message()
+        return
+
+    # the commands from here on modify a list of tracks to be queue
+    # and we have to check hat we have spotify available
+    # get an auth managher, if no auth manager is available, dump a message
+    await spotifyhelper.get_auth_manager(update.effective_chat.id)
+    if auth_manager is None:
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            parse_mode='HTML',
+            text="Bot not connected to player. The admin should perform the /connect command to authorize the bot.")
+        context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
+        return
+
+    # create spotify instance
+    sp = spotipy.Spotify(auth_manager=auth_manager)
+
+    # TODO: verify that player is available, otherwise it has no use to queue a track
+                      
+    # Play a random track from a playlist
+    spotify_uri_list = []            
+    if command.startswith("PLAYRANDOM"):
+        (command, playlistid) = command.split(':')    
+        result = sp.playlist_items(playlistid,offset=0,limit=1)
+        idxs = random.sample(range(0,result['total']),1)
+        for idx in idxs:    
+            result = sp.playlist_items(playlistid,offset=idx,limit=1)
+            for item in result['items']:
+                spotify_uri_list.append(item['track']['uri'])            
+    else:
+        # add a single track to the list
+        spotify_uri_list = [command]
+        await query.delete_message()
+
+    # validate payment conditions
+    payment_required = True
+    amount_to_pay = int(price * len(spotify_uri_list))    
+    if amount_to_pay == 0:
+        payment_required = False
+            
+    # if no payment required, add the tracks to the queue one by one
+    if payment_required == False:
+        for uri in spotify_uri_list:
+            sp.add_to_queue(item)            
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                parse_mode='HTML',
+                text=f"@{update.effective_user.username} added '{spotifyhelper.get_track_title(sp.track(item))}' to the queue.")
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                parse_mode='HTML',
+                text=f"You added '{spotifyhelper.get_track_title(sp.track(item))}' to the queue.")
+                
+    # create an invoice title
+    invoice_title = f"'{spotify_uri_list[0]}'"
+    for i in range(1,len(spotify_uri_list)):
+        title += f",'{spotify_uri_list[i]}'"
+
+    # create the invoice 
+    invoice = await settings.lnbits.createInvoice(settings.lnbits._admin_invoicekey,amount_to_pay,invoice_title)
+
+    # get the user wallet and try to pay the invoice
+    user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
+
+    # pay the invoice
+    result = await settings.lnbits.payInvoice(invoice['payment_request'],user.adminkey)
+
+    # if payment success
+    if payment_result['result'] == True:
+        for uri in spotify_uri_list:
+            sp.add_to_queue(item)            
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            parse_mode='HTML',
+            text=f"@{update.effective_user.username} added {invoicetitle} to the queue.")
+        await context.bot.send_message(
+            chat_id=update.effective_user.id,
+            parse_mode='HTML',
+            text=f"You paid {amount_to_pay} sats for {invoice_title}.")
+        return
+            
+    # if payment fails, either fund the wallet or pay the invoice            
+    # get balance for user
+    balance = await settings.lnbits.getBalance(user.invoicekey)
+        
+    # we failed paying the invoice, popup the lnurlp
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"@{update.effective_user.username} add '{invoice_title}' to the queue?\n\nThen pay the invoice sats.",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/redirect?url=lightning:{invoice['payment_request']}"),
+            InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))
+        ]]))
+    
+
+    # create a job to check the invoice
+    context.job_queue.run_once(callback_check_invoice, 5, data={
+        'payment_hash': invoice['payment_hash'],
+        'user_id':update.effective_user.id,
+        'username': update.effective_user.username,
+        'invoice_title': invoice_title,
+        'spotify_uri_list': spotify_uri_list,
+        'message_id': message.id,
+        'chat_id': chat.id,
+        'timeout': 180        
+        })
+
+async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
+    """Callback that handles the custom updates."""
+    chat_member = await context.bot.get_chat_member(chat_id=update.user_id, user_id=update.user_id)
+    payloads = context.user_data.setdefault("payloads", [])
+    payloads.append(update.payload)
+    combined_payloads = "</code>\n• <code>".join(payloads)
+    text = (
+        f"The user {chat_member.user.mention_html()} has sent a new payload. "
+        f"So far they have sent the following payloads: \n\n• <code>{combined_payloads}</code>"
+    )
+    await context.bot.send_message(
+        chat_id=context.bot_data["admin_chat_id"], text=text, parse_mode=ParseMode.HTML
+    )
+
+                  
 async def main() -> None:
     """Set up the application and a custom webserver."""
     url = "https://bot.wholestack.nl"
@@ -616,7 +804,7 @@ async def main() -> None:
     application.add_handler(CommandHandler("setclientid",spotify_settings))  # TODO only in private chat
     application.add_handler(CommandHandler(["start","help"],start))    
     application.add_handler(CommandHandler(['dj','zap'], zap))            
-    application.add_handler(TypeHandler(type=WebhookUpdate, callback=webhook_update))
+#    application.add_handler(TypeHandler(type=WebhookUpdate, callback=webhook_update))
 
     # Pass webhook settings to telegram
     await application.bot.set_webhook(url=f"{url}/telegram")
