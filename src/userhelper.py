@@ -2,96 +2,60 @@ import redis
 from redis import RedisError
 import asyncio
 from lnbits import LNbits
-from user import User, SpotifySettings
 import settings
 import json
 import logging
-from spotipy import CacheHandler
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth
+import qrcode
 
-class CacheJukeboxHandler(CacheHandler):
-    """
-    This cache handler keeps track of spotify auth data and is stored in the redis database per group so that multiple authorisations can be active at the same time
-    """    
-    def __init__(self, chat_id):
-        self.chat_id = chat_id
-        self.key = f"spotify_token:{self.chat_id}"
+class User:
+    def __init__(self, tguserid, tgusername):
+        self.userid = tguserid
+        self.username = tgusername
+        self.rediskey = f"user:{self.userid}"
+        self.invoicekey = None
+        self.adminkey = None 
+        self.lnbitsuserid = None
+        self.walletid = None
+        self.lnurlp = None
+        self.lndhub = None
 
-    def get_cached_token(self):
-        logging.info("Obtain cached token")
-        token_info = None
-    
-        try:
-            token_info = settings.rds.get(self.key)
-            if token_info:
-                return json.loads(token_info)
-        except RedisError as e:
-            logging.warning('Error getting token from cache: ' + str(e))       
-
-        return token_info
-
-
-    def save_token_to_cache(self, token_info):
-        logging.info("saving token to cache")
-        try:
-            settings.rds.set(self.key, json.dumps(token_info))
-        except RedisError as e:
-            logging.warning('Error saving token to cache: ' + str(e))
-
-
-async def create_auth_manager(chat_id, client_id, client_secret):
-    return SpotifyOAuth(
-        scope='user-read-currently-playing,user-modify-playback-state,user-read-playback-state',
-        client_secret=client_secret,
-        client_id=client_id,
-        redirect_uri=settings.spotify_redirect_uri,
-        show_dialog=False,
-        open_browser=False,        
-        cache_handler=CacheJukeboxHandler(chat_id))
-            
-async def init_auth_manager(chat_id, client_id, client_secret):
-    """
-    Initialize a spotify auth manager for a specific group
-    """
-    data = {
-        'chat_id': chat_id,
-        'client_id': client_id,
-        'client_secret': client_secret
-    }
-    settings.rds.set(f"authmanager:{chat_id}", json.dumps(data))
-
-    return await create_auth_manager(chat_id, client_id, client_secret)
+    def toJson(self):
+        userdata = {
+            'telegram_userid':self.userid,
+            'lnbits_userid':self.lnbitsuserid,
+            'telegram_username':self.username,
+            'invoicekey':self.invoicekey,
+            'adminkey':self.adminkey,
+            'walletid':self.walletid,
+            'lnurlp':self.lnurlp,
+            'lndhub':self.lndhub
+        }
+        return json.dumps(userdata)
         
+    def loadJson(self, data):
+        assert(data is not None)
+        userdata = json.loads(data)
+        assert(userdata is not None)
+        assert(userdata['telegram_userid'] == self.userid)
         
-async def get_auth_manager(chat_id):
-    """
-    Create a spotify auth manager for a specific group
-    """
-    data = settings.rds.get(f"authmanager:{chat_id}")
-    if data is None:
-        return None
+        self.invoicekey = userdata['invoicekey']
+        self.adminkey = userdata['adminkey']
+        self.walletid = userdata['walletid']
+        self.lnurlp = userdata['lnurlp']
+        self.lndhub = userdata['lndhub']
+        self.lnbitsuserid = userdata['lnbits_userid']
 
-    data = json.loads(data)
-    return await create_auth_manager(data['chat_id'], data['client_id'], data['client_secret'])
 
-            
-async def save_spotify_settings(sps):
-    """
-    Store spotify settings in Redis
-    """
-    settings.rds.hset(sps.userkey,"spotify",sps.toJson())
-    
-
-async def get_spotify_settings(userid):
-    """
-    Get the spotify settings for this user
-    """
-    sps = SpotifySettings(userid)    
-    data = settings.rds.hget(sps.userkey,"spotify")
-    if data is not None:
-        sps.loadJson(data)
-    return sps
+# Get/Create a QR code and store in filename
+def get_qrcode_filename(data):
+    filename = os.path.join(settings.qrcode_path,"{}.png".format(hash(data)))
+    if not os.path.isfile(filename):
+        img = qrcode.make(data)
+        file = open(filename,'wb')
+        if file:
+            img.save(file)
+            file.close()
+    return filename
         
 async def get_or_create_user(userid,username):
     """
@@ -153,9 +117,7 @@ async def get_or_create_user(userid,username):
             "comment_chars": 0,
             "webhook_url": f"https://bot.wholestack.nl/lnbitscallback?userid={user.userid}"
         })
-        user.lnurlp = f"https://lnbits.wholestack.nl/lnurlp/link/{lnurlpid}"
-
-    
+        user.lnurlp = f"https://lnbits.wholestack.nl/lnurlp/link/{lnurlpid}"    
 
         # save parameters
         settings.rds.hset(user.rediskey,"userdata",user.toJson())
