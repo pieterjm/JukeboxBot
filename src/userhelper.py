@@ -6,6 +6,7 @@ import settings
 import json
 import logging
 import qrcode
+import os
 
 class User:
     def __init__(self, tguserid, tgusername):
