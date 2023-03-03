@@ -71,28 +71,6 @@ now_playing_message = {}
 # message debouncer to prevent processing the same message twice
 message_debounce = {}
 
-@dataclass
-class WebhookUpdate:
-    """Simple dataclass to wrap a custom update type"""
-    user_id: int
-    payload: str
-
-class CustomContext(CallbackContext[ExtBot, dict, dict, dict]):
-    """
-    Custom CallbackContext class that makes `user_data` available for updates of type
-    `WebhookUpdate`.
-    """
-
-    @classmethod
-    def from_update(
-        cls,
-        update: object,
-        application: "Application",
-    ) -> "CustomContext":
-        if isinstance(update, WebhookUpdate):
-            return cls(application=application, user_id=update.user_id)
-        return super().from_update(update, application)
-
 # delete telegram messages
 # This function is used in callbacks to enable the deletion of messages from users or the bot itself after some time
 async def delete_message(context: ContextTypes.DEFAULT_TYPE):
@@ -886,7 +864,6 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/redirect?url=lightning:{invoice['payment_request']}"),
             InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))
         ]]))
-    
 
     # create a job to check the invoice
     context.job_queue.run_once(callback_check_invoice, 5, data={
@@ -901,53 +878,36 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         'timeout': 180        
         })
 
-async def webhook_update(update: WebhookUpdate, context: CustomContext) -> None:
-    """Callback that handles the custom updates."""
-    chat_member = await context.bot.get_chat_member(chat_id=update.user_id, user_id=update.user_id)
-    payloads = context.user_data.setdefault("payloads", [])
-    payloads.append(update.payload)
-    combined_payloads = "</code>\n• <code>".join(payloads)
-    text = (
-        f"The user {chat_member.user.mention_html()} has sent a new payload. "
-        f"So far they have sent the following payloads: \n\n• <code>{combined_payloads}</code>"
-    )
-    await context.bot.send_message(
-        chat_id=context.bot_data["admin_chat_id"], text=text, parse_mode=ParseMode.HTML
-    )
-
-                  
 async def main() -> None:
     """Set up the application and a custom webserver."""
-    port = 7000
 
-    #context_types = ContextTypes(context=CustomContext)
     # Here we set updater to None because we want our custom webhook server to handle the updates
     # and hence we don't need an Updater instance
     application = (
-        #Application.builder().token(settings.bot_token).updater(None).context_types(context_types).build()
         Application.builder().token(settings.bot_token).updater(None).build()
     )
     # save the values in `bot_data` such that we may easily access them in the callbacks
     application.bot_data["url"] = settings.bot_url
 
     # register handlers
-    application.add_handler(CommandHandler('add', search))
-    application.add_handler(CommandHandler('balance', balance))
-    application.add_handler(CommandHandler('connect', connect)) # in both private and public chats
-    application.add_handler(CommandHandler('disconnect', disconnect)) # in both private and public chats
-    application.add_handler(CommandHandler('fund',fund))
-    application.add_handler(CommandHandler('history', history))
-    application.add_handler(CommandHandler('link',link))
-    application.add_handler(CommandHandler('pay', pay)) # only in private chat
-    application.add_handler(CommandHandler('queue', queue))
-    application.add_handler(CommandHandler("setclientsecret",spotify_settings))    # TODO only in private chat
-    application.add_handler(CommandHandler("setclientid",spotify_settings))  # TODO only in private chat
-    application.add_handler(CommandHandler(["start","help"],start))    
-    application.add_handler(CommandHandler(['dj','zap'], zap))
+
+
+    application.add_handler(CommandHandler('add', search))  # search for a track
+    application.add_handler(CommandHandler('balance', balance)) # view wallet balance
+    application.add_handler(CommandHandler('connect', connect)) # connect to spotify account
+    application.add_handler(CommandHandler('disconnect', disconnect)) # disconnect from spotify account
+    application.add_handler(CommandHandler('fund',fund)) # add funds to wallet
+    application.add_handler(CommandHandler('history', history)) # view history of tracks
+    application.add_handler(CommandHandler('link',link)) # view LNDHUB QR 
+    application.add_handler(CommandHandler('pay', pay)) # pay a lightning invoice
+    application.add_handler(CommandHandler('queue', queue)) # view the queue
+    application.add_handler(CommandHandler("setclientsecret",spotify_settings)) # set the secret for a spotify app
+    application.add_handler(CommandHandler("setclientid",spotify_settings))  # set the clientid or a spotify app
+    application.add_handler(CommandHandler(["start","help"],start))  # help message
+    application.add_handler(CommandHandler('dj', zap))  # pay another user    
+
     application.add_handler(CallbackQueryHandler(callback_button))
     application.job_queue.run_repeating(callback_spotify, 10)
-        
-#    application.add_handler(TypeHandler(type=WebhookUpdate, callback=webhook_update))
 
     # Pass webhook settings to telegram
     await application.bot.set_webhook(
@@ -976,9 +936,9 @@ async def main() -> None:
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """ 
         This function handles the callback from spotify when authorizing request to an account
-        
+
         A typical request will like like the following
-     
+
         GET /spotifycallback?code=AQB5sDUcKql9oULl10ftgo9Lhmyzr3lpMRQl7i65drdM4WGaWvfx9ANBcUXVg-yR1FAqS2_yINbf6ej41lNr9ghmBGik0Bjwcgf90yxYLgk_H5c_ZcV2AKz9-eiqsnjZxqVoJyWqc5LnRHn0aEGG8YwBsk5ZHKIQh82uHikDZyAxKSCdLGCIaPbQtNUR0ej8WZH1y_gg_YOJa5aoC-f4ODJYOrokOTolxnlEy3zaJvddOgCF_GC8Fd9upxmovV5JR8LfACvrurjGYW7MaGeDKWMCb29GNXtg3lovTh2rwzE HTTP/1.0
         """
 
@@ -1003,7 +963,6 @@ async def main() -> None:
             logging.error("Failure during query parameter parsing")
             return Response()
 
-        
         try:
             auth_manager = await spotifyhelper.get_auth_manager(chatid)
             if auth_manager is not None:
@@ -1015,18 +974,17 @@ async def main() -> None:
             return Response()
 
         return Response("Authorisation succesfull. You can close this window now")
-    
-            
+
     async def lnbits_lnurlp_callback(request: Request) -> PlainTextResponse:
         """
         Callback from LNbits when a wallet is funded. Send a message to the telegram user
 
         The callback is a POST request with a userid parameter in the URL
-        
+
         The body content should be similar to the following
 
         {"payment_hash": "6d0734e641013e56767c6d8e4c0d02e6db0ddfdaa35cc370320e0cafb66565e7", "payment_request": "lnbc210n1p3l7k46pp5d5rnfejpqyl9vanudk8ycrgzumdsmh765dwvxupjpcx2ldn9vhnshp58aq3spsfd2263qpprxz7pqvhqm03mf2np6n9j8v0fpu7zqma94dqcqzpgxqzjcsp52d0hk2pzn75ugwzxev8tnf8xype05eaeadpmmv6rg72zchm649xs9qyyssqptzl7wwwkkjmaggr4s0m6gghmtla0uv38036m9py535ezng3pmxne69tw5p99f4e2vv4kqpwyx2kle6yn2xw4qes5268j97d3ycn97gp954uw3", "amount": 21000, "comment": null, "lnurlp": "2bP7Xn", "body": ""}'
-        
+
         """
         tguserid = request.query_params['userid']
         if re.search("^[0-9]+$",tguserid):            
@@ -1036,7 +994,7 @@ async def main() -> None:
                 chat_id=int(tguserid),
                 text=f"Received {amount} sats.Type /balance to view your balance.")
         return Response()
-            
+
     starlette_app = Starlette(
         routes=[
             Route("/telegram", telegram, methods=["POST"]),
@@ -1045,11 +1003,11 @@ async def main() -> None:
             Route("/redirect",redirect_callback, methods=["GET"])
         ]
     )
-    
+
     webserver = uvicorn.Server(
         config=uvicorn.Config(
             app=starlette_app,
-            port=port,
+            port=settings.port,
             use_colors=False,
             host="127.0.0.1",
         )

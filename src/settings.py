@@ -21,6 +21,7 @@ def init():
     global delete_message_timeout_long
     global secret_token
     global qrcode_path
+    global port
     
     # set the new environment and fall back to development
     env = 'development'
@@ -42,6 +43,9 @@ def init():
     # set secret token for telegram
     secret_token = "".join(random.sample(string.ascii_letters,12))
 
+    # webserver port
+    port = 7000
+    
     environment = env
     if env == 'production':
         rds = redis.Redis(db=0)
