@@ -76,6 +76,9 @@ class CacheJukeboxHandler(CacheHandler):
 
 
 
+def add_to_queue(sp, spotify_uri_list):
+    for uri in spotify_uri_list:
+        sp.add_to_queue(uri)            
 
 
 # construct the track title from a Spotify track item

@@ -56,7 +56,7 @@ def init():
             os.environ['LNBITS_USRKEY'])
         bot_url="https://bot.wholestack.nl/"
         lnbits_public_host='lnbits.wholestack.nl'
-        spotify_redirect_uri=os.environ['MY_SPOTIPY_REDIRECT_URI']
+        spotify_redirect_uri=f'{bot_url}/spotifycallback'
         bot_token = os.environ['BOT_TOKEN']
         qrcode_path= '/tmp'
 
@@ -81,8 +81,9 @@ def init():
             'f6f99487036447618a0de0e2fcc1720a',
             'a46583204eda467fb4a52c5b8e9e8b59',            
             '47ddeb21c32a46ac82c7eacb482020cb')
-        spotify_redirect_uri='http://localhost:8080/'
+
         bot_url="https://bot.wholestack.nl/"
+        spotify_redirect_uri='https://bot.wholestack.nl/spotifycallback' # this must literaly match the config in spotify
         bot_token="6163071450:AAGRq9Jo9eAgYo6EepzsT0SmWSA3snVR9ns"
         qrcode_path = '/tmp'
         logging.basicConfig(

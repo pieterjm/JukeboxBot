@@ -688,15 +688,14 @@ async def callback_check_invoice(context: ContextTypes.DEFAULT_TYPE):
     
     # check if the invoice has been paid
     if await settings.lnbits.checkInvoice(settings.lnbits._admin_invoicekey,context.job.data['payment_hash']) == True:
-        auth_manager = await spotify_helper.get_auth_manager(context.job.data['chat_id'])
+        auth_manager = await spotifyhelper.get_auth_manager(context.job.data['chat_id'])
         if auth_manager is None:
             logging.error("No auth manager after succesfull payment")
             return
 
         # add to the queue and inform others
         sp = spotipy.Spotify(auth_manager=auth_manager)
-        for uri in spotify_uri_list:
-            sp.add_to_queue(item)            
+        spotifyhelper.add_to_queue(sp, context.job.data['spotify_uri_list'])
         await context.bot.send_message(
             chat_id=context.job.data['chat_id'],
             parse_mode='HTML',
@@ -838,16 +837,17 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             
     # if no payment required, add the tracks to the queue one by one
     if payment_required == False:
+        spotifyhelper.add_to_queue(sp, spotify_uri_list)
+
         for uri in spotify_uri_list:
-            sp.add_to_queue(item)            
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 parse_mode='HTML',
-                text=f"@{update.effective_user.username} added '{spotifyhelper.get_track_title(sp.track(item))}' to the queue.")
+                text=f"@{update.effective_user.username} added '{spotifyhelper.get_track_title(sp.track(uri))}' to the queue.")
             await context.bot.send_message(
                 chat_id=update.effective_user.id,
                 parse_mode='HTML',
-                text=f"You added '{spotifyhelper.get_track_title(sp.track(item))}' to the queue.")
+                text=f"You added '{spotifyhelper.get_track_title(sp.track(uri))}' to the queue.")
                 
     # create an invoice title
     invoice_title = f"'{spotifyhelper.get_track_title(sp.track(spotify_uri_list[0]))}'"
@@ -865,8 +865,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # if payment success
     if payment_result['result'] == True:
-        for uri in spotify_uri_list:
-            sp.add_to_queue(item)            
+        spotifyhelper.add_to_queue(sp, spotify_uri_list)
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
@@ -895,6 +894,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         'user_id':update.effective_user.id,
         'username': update.effective_user.username,
         'invoice_title': invoice_title,
+        'amount_to_pay': amount_to_pay,
         'spotify_uri_list': spotify_uri_list,
         'message_id': message.id,
         'chat_id': update.effective_chat.id,
@@ -931,9 +931,10 @@ async def main() -> None:
     application.bot_data["url"] = settings.bot_url
 
     # register handlers
-    application.add_handler(CommandHandler('search', search))
+    application.add_handler(CommandHandler('add', search))
     application.add_handler(CommandHandler('balance', balance))
     application.add_handler(CommandHandler('connect', connect)) # in both private and public chats
+    application.add_handler(CommandHandler('disconnect', disconnect)) # in both private and public chats
     application.add_handler(CommandHandler('fund',fund))
     application.add_handler(CommandHandler('history', history))
     application.add_handler(CommandHandler('link',link))
@@ -981,12 +982,16 @@ async def main() -> None:
         GET /spotifycallback?code=AQB5sDUcKql9oULl10ftgo9Lhmyzr3lpMRQl7i65drdM4WGaWvfx9ANBcUXVg-yR1FAqS2_yINbf6ej41lNr9ghmBGik0Bjwcgf90yxYLgk_H5c_ZcV2AKz9-eiqsnjZxqVoJyWqc5LnRHn0aEGG8YwBsk5ZHKIQh82uHikDZyAxKSCdLGCIaPbQtNUR0ej8WZH1y_gg_YOJa5aoC-f4ODJYOrokOTolxnlEy3zaJvddOgCF_GC8Fd9upxmovV5JR8LfACvrurjGYW7MaGeDKWMCb29GNXtg3lovTh2rwzE HTTP/1.0
         """
 
+        logging.info("Got callback from spotify")
+        
         code = request.query_params["code"]
         if not re.search("^[A-Za-z0-9\-\_]+$",code):
+            logging.warning("authorisation code does not match regex")
             return Response()
 
         state = request.query_params["state"]
-        if not re.search("^[0-9\-]+$",state):
+        if not re.search("^[0-9A-Za-z\-]+$",state):
+            logging.warning("state parameter does not match regex")
             return Response()
 
         try:
