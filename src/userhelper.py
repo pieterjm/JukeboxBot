@@ -57,7 +57,7 @@ def get_qrcode_filename(data):
             img.save(file)
             file.close()
     return filename
-        
+
 async def get_or_create_user(userid,username):
     """
     Get or create a user in redis and lnbits and return the user object

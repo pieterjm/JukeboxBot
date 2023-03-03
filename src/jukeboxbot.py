@@ -73,6 +73,9 @@ now_playing_message = {}
 # message debouncer to prevent processing the same message twice
 message_debounce = {}
 
+# dictionary of invoices
+invoices = {}
+
 def adminonly(func):
     """
     This decorator function manages that only admin in a group chat are allowed to execute the function
@@ -644,9 +647,12 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # periodic check for a paid invoice            
 async def callback_check_invoice(context: ContextTypes.DEFAULT_TYPE):
-    
     # check if the invoice has been paid
     if await settings.lnbits.checkInvoice(settings.lnbits._admin_invoicekey,context.job.data['payment_hash']) == True:
+        invoicekey = context.job.data['invoicekey']
+        if invoicekey in invoices:
+            del invoices[invoicekey]
+        
         auth_manager = await spotifyhelper.get_auth_manager(context.job.data['chat_id'])
         if auth_manager is None:
             logging.error("No auth manager after succesfull payment")
@@ -671,6 +677,11 @@ async def callback_check_invoice(context: ContextTypes.DEFAULT_TYPE):
     # not yet paid, reschedule job or forget about it after some time
     if context.job.data['timeout'] <= 0:
         await context.bot.delete_message(context.job.data['chat_id'],context.job.data['message_id'])
+
+        # remove the invoice from our watchlist
+        invoicekey = context.job.data['invoicekey']
+        if invoicekey in invoices:
+            del invoices[invoicekey]
     else:
         interval = 5
         context.job.data['timeout'] -= interval            
@@ -810,6 +821,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # create the invoice 
     invoice = await settings.lnbits.createInvoice(settings.lnbits._admin_invoicekey,amount_to_pay,invoice_title)
+    
 
     # get the user wallet and try to pay the invoice
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
@@ -829,20 +841,24 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             parse_mode='HTML',
             text=f"You paid {amount_to_pay} sats for {invoice_title}.")
         return
-            
-        
+
+    # store the invoice in a list of open invoices
+    invoicekey = "".join(random.sample(string.ascii_letters,8))
+    invoices[invoicekey] = invoice
+    
     # we failed paying the invoice, popup the lnurlp
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=f"@{update.effective_user.username} add '{invoice_title}' to the queue?\n\nThen pay the invoice of {amount_to_pay} sats.",
         parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/redirect?url=lightning:{invoice['payment_request']}"),
+        reply_markup=InlineKeyboardMarkup([[        
+            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/payinvoice?invoicekey={invoicekey}"),
             InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))
         ]]))
 
     # create a job to check the invoice
     context.job_queue.run_once(callback_check_invoice, 5, data={
+        'invoicekey': invoicekey,
         'payment_hash': invoice['payment_hash'],
         'user_id':update.effective_user.id,
         'username': update.effective_user.username,
@@ -902,12 +918,14 @@ async def main() -> None:
                 )
         return Response()
 
-    async def redirect_callback(request: Request) -> Response:
-        url = request.query_params["url"]
-        if url.startswith("lightning:lnbc"):
-            return RedirectResponse(url = url)
-        else:
+    async def payinvoice_callback(request: Request) -> Response:
+        invoicekey = request.query_params["invoicekey"]
+        if invoicekey not in invoices:
             return Response()
+
+        invoice = invoices[invoicekey]
+
+        return Response("Pay the following invoice<br><pre>{invoice['payment_request']}</pre>")
 
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """ 
@@ -976,7 +994,7 @@ async def main() -> None:
             Route("/telegram", telegram, methods=["POST"]),
             Route("/lnbitscallback", lnbits_lnurlp_callback, methods=["POST"]),
             Route("/spotifycallback", spotify_callback, methods=["GET"]),
-            Route("/redirect",redirect_callback, methods=["GET"])
+            Route("/payinvoice",payinvoice_callback, methods=["GET"])
         ]
     )
 
