@@ -8,10 +8,8 @@ A Bitcoin lightning enabled Jukebox for Telegram
  - The handle of the bot is "jukebox_fm_bot'
 
 ## Backlog
- - Connect JukeboxBot to noderunnersfm
- - Integrate callback script and bot script into one script
- - Change polling function to callback from telegram
- - Create a welcome message for new users
+ - Spotify gave a new error when connecting, test invalid ID's
+ - Create nicely designed HTML pages for payment and Spotify connection
 
 ## Ideas for new features
  - One-to-one communication: Allow users to have a private conversation with to bot. Search for tracks, manage their playlist, add to queue. This one is important to create as it enables to create other features as described below. 
@@ -31,3 +29,7 @@ A Bitcoin lightning enabled Jukebox for Telegram
  - Upload code to github 
  - When a track is selected, the payment message is a new message. This requires the user to scroll. Instead the track selection message should be replaced. Fixed.
  - Reversed history in message
+ - Connect JukeboxBot to noderunnersfm
+ - Integrate callback script and bot script into one script
+ - Change polling function to callback from telegram
+ - Create a welcome message for new users
