@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from http import HTTPStatus
 import redis
 import random
+import string
 
 import uvicorn
 from starlette.applications import Starlette
@@ -637,7 +638,7 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text=f"Sent {amount} sats to  @{recipient.username}.")
 
 
-        logging.info(f"User {sender.id} sent {amount} sats to {recipient.id}")
+        logging.info(f"User {sender.userid} sent {amount} sats to {recipient.userid}")
     else:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -925,7 +926,7 @@ async def main() -> None:
 
         invoice = invoices[invoicekey]
 
-        return Response("Pay the following invoice<br><pre>{invoice['payment_request']}</pre>")
+        return Response(f"Pay the following invoice<br><pre>{invoice['payment_request']}</pre>", media_type="text/html")
 
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """ 
