@@ -18,6 +18,8 @@ A Bitcoin lightning enabled Jukebox for Telegram
 ## Ideas for new features
  - Connect the bot to NOSTR
  - Audio players other than spotify
+ - rewards, gokken.
+ - Liedjes faucet, ik gooi geld in de jukebox, maar jullie mogen de muziek uitzoeken
 
 ## Problems
   - When the player is not available, the bot keeps sending messages that the player is not available, removed for now  
