@@ -77,14 +77,33 @@ class CacheJukeboxHandler(CacheHandler):
 
 
 def add_to_queue(sp, spotify_uri_list):
+    """
+    Add a list of tracks to the queue
+    """
     for uri in spotify_uri_list:
         sp.add_to_queue(uri)            
 
-
 # construct the track title from a Spotify track item
 def get_track_title(item):
-    return "{artist} - {track}".format(artist=item['artists'][0]['name'],track=item['name'])
-            
+    """
+    Get a readable version of the track title
+    """
+    artist=item['artists'][0]['name']
+    track=item['name']
+
+
+    # Rage Against The Machine - Killing in The Name
+
+    # truncate artist to a max of 25 characters
+    max_artist_len = max(25,50 - len(track))
+    if len(artist) > max_artist_len:
+        artist = artist[0:max_artist_len]
+        
+        
+    return f"{artist} - {track}"
+
+
+
 async def create_auth_manager(chat_id, client_id, client_secret):
     return SpotifyOAuth(
         scope='user-read-currently-playing,user-modify-playback-state,user-read-playback-state',
@@ -120,7 +139,21 @@ async def get_auth_manager(chat_id):
     data = json.loads(data)
     return await create_auth_manager(data['chat_id'], data['client_id'], data['client_secret'])
 
-            
+
+# TODO: maybe we can perform a de-authorize call at spotify instead of just removing the key
+async def delete_auth_manager(chat_id):
+    """
+    Removes an auth manager from our local store
+    """
+    data = settings.rds.get(f"authmanager:{chat_id}")
+    if data is None:
+        return True
+
+    
+    settings.rds.delete(f"authmanager:{chat_id}")
+    return True
+
+
 async def save_spotify_settings(sps):
     """
     Store spotify settings in Redis
