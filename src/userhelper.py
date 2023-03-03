@@ -7,6 +7,7 @@ import json
 import logging
 import qrcode
 import os
+from time import time
 
 class User:
     def __init__(self, tguserid, tgusername):
@@ -45,7 +46,6 @@ class User:
         self.lnurlp = userdata['lnurlp']
         self.lndhub = userdata['lndhub']
         self.lnbitsuserid = userdata['lnbits_userid']
-
 
 # Get/Create a QR code and store in filename
 def get_qrcode_filename(data):

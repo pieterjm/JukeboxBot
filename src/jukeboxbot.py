@@ -100,7 +100,6 @@ def adminonly(func):
             
     return wrapper
 
-
 def debounce(func):
     """
     This decorator function manages the debouncing of message when executing commands
@@ -165,6 +164,7 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     balance = await settings.lnbits.getBalance(user.invoicekey)
 
     # create a message with the balance
+    logging.info(f"User {user.userid} balance is {balance} sats")
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=f"Your balance is {balance} sats.")
@@ -245,6 +245,16 @@ async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # if both variables are not none, ask the user to authorize
     if sps.client_id is not None and sps.client_secret is not None:
 
+        # get an auth manaer 
+        auth_manager = await spotifyhelper.get_auth_manager(update.effective_chat.id)
+        if auth_manager is not None:
+            message = await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="A player is already connected to this group chat. disconnect it first using the /disconnect command before connecting a new one")
+            context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})
+            return
+            
+            
         auth_manager = await spotifyhelper.init_auth_manager(update.effective_chat.id,sps.client_id,sps.client_secret)
 
         # send instructions in the group
@@ -467,6 +477,7 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.send_message(
             chat_id=update.effective_user.id,
             text="Payment succes.")
+        logging.info(f"User {user.userid} paid and invoice")
     else:
         # TODO, filter on the result detail. It may contain sensitive information
         await context.bot.send_message(
@@ -622,6 +633,8 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=sender.userid,
             text=f"Sent {amount} sats to  @{recipient.username}.")
 
+
+        logging.info(f"User {sender.id} sent {amount} sats to {recipient.id}")
     else:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -708,11 +721,6 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
             await context.bot.pin_chat_message(chat_id=chat_id, message_id=message.id)
             now_playing_message[chat_id] = [ message.id, title ]
        
-
-    
-    
-    
-            
 #callback for button presses
 async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
