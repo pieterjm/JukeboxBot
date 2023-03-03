@@ -102,6 +102,7 @@ async def get_or_create_user(userid,username):
         user.adminkey = wallet['adminkey']
         user.walletid = wallet['id']
 
+        # TODO, it looks like this goes well for a user that is configured, but has no extensions configured
         # enable extensions for user
         await settings.lnbits.enableExtension("lnurlp",user.lnbitsuserid)
         await settings.lnbits.enableExtension("lndhub",user.lnbitsuserid)
