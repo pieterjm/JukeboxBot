@@ -24,7 +24,7 @@ def init():
     global port
     
     # set the new environment and fall back to development
-    env = 'development'
+    env = None
     if 'JUKEBOX_ENV' in os.environ:
         env = os.environ['JUKEBOX_ENV']
         
@@ -70,8 +70,6 @@ def init():
             level=logging.INFO
             )
 
-
-
         return True
     elif env == 'development':
         price = 21
@@ -80,21 +78,19 @@ def init():
         rds = redis.Redis(db=2)
         lnbits_public_host='lnbits.wholestack.nl'
         lnbits = LNbits(
-            'https',
-            lnbits_public_host,
-            'f6f99487036447618a0de0e2fcc1720a',
-            'a46583204eda467fb4a52c5b8e9e8b59',            
-            '47ddeb21c32a46ac82c7eacb482020cb')
-
+            os.environ['LNBITS_PROTOCOL'],
+            os.environ['LNBITS_HOST'],
+            os.environ['LNBITS_ADMINKEY'],
+            os.environ['LNBITS_INVOICEKEY'],
+            os.environ['LNBITS_USRKEY'])
         bot_url="https://bot.wholestack.nl/"
         spotify_redirect_uri='https://bot.wholestack.nl/spotifycallback' # this must literaly match the config in spotify
-        bot_token="6163071450:AAGRq9Jo9eAgYo6EepzsT0SmWSA3snVR9ns"
+        bot_token=os.environ['BOT_TOKEN']
         qrcode_path = '/tmp'
         logging.basicConfig(
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             level=logging.INFO
         )
-
 
 
 
