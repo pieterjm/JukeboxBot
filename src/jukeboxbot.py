@@ -161,10 +161,10 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # we're in a private chat now
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
-            
-    # get the balance from LNbits
-    balance = await settings.lnbits.getBalance(user.invoicekey)
 
+    # get the balance from LNbits
+    balance = await userhelper.get_balance(user)
+    
     # create a message with the balance
     logging.info(f"User {user.userid} balance is {balance} sats")
     message = await context.bot.send_message(
@@ -386,14 +386,12 @@ async def spotify_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 @debounce
 async def fund(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
-
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=f"Click on the button to fund the wallet of @{user.username}.",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(f"Fund sats",url=user.lnurlp)]
             ]))
-    
     context.job_queue.run_once(delete_message, settings.delete_message_timeout_long, data={'message':message})
 
 # view the history of recently played tracks
@@ -600,8 +598,8 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             
     # get the user that is sending the sats and check his balance
     sender = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
-    balance = await settings.lnbits.getBalance(sender.invoicekey)
-
+    balance = await userhelper.get_balance(sender)
+    
     if balance < amount:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -680,7 +678,7 @@ async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
     # cancel the invoice
     if cancel_invoice == True:
         if invoice is not None:
-            invoicehelper.delete_invoice(payment_request)
+            invoicehelper.delete_invoice(payment_hash)
             await context.bot.delete_message(invoice.chat_id,invoice.message_id)            
         return
 
@@ -871,7 +869,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.job_queue.run_once(check_invoice_callback, settings.delete_message_timeout_medium, data={'payment_hash':invoice.payment_hash,'cancel':False})
     
     # create a short timeout as fall back to cancel the invoice
-    context.job_queue.run_once(check_invoice_callback, settings.delete_message_timeout_long, data={'payment_hash':invoice.payment_hash,'cancel':True)
+    context.job_queue.run_once(check_invoice_callback, settings.delete_message_timeout_long, data={'payment_hash':invoice.payment_hash,'cancel':True})
 
 
 async def main() -> None:
@@ -938,8 +936,6 @@ async def main() -> None:
         
     async def payinvoice_callback(request: Request) -> Response:
         payment_hash = request.query_params["payment_hash"]
-        if payment_hash not in invoices:
-            return Response()
 
         invoice = invoicehelper.get_invoice(payment_hash)
         if invoice is None:

@@ -40,6 +40,10 @@ class User:
         assert(userdata is not None)
         assert(userdata['telegram_userid'] == self.userid)
         
+        if self.username is not None:
+            assert(self.username == userdata['telegram_username'])
+        else:
+            self.username = userdata['telegram_username']
         self.invoicekey = userdata['invoicekey']
         self.adminkey = userdata['adminkey']
         self.walletid = userdata['walletid']
@@ -67,15 +71,19 @@ async def get_group_owner(chat_id):
     userid = data.decode('utf-8')
     rediskey = f"user:{userid}"
 
-    userdata = settings.rds.hget(user.rediskey,"userdata")
+    userdata = settings.rds.hget(rediskey,"userdata")
     if userdata is None:
         return None
     
+    user = User(userid,None)
     user.loadJson(userdata)
     return user
 
 async def delete_group_owner(chat_id):
     data = settings.rds.hdel(f"group:{chat_id}","owner")
+
+async def get_balance(user):
+    return settings.lnbits.getBalance(user.invoicekey)
 
 
 async def set_group_owner(chat_id, user):
