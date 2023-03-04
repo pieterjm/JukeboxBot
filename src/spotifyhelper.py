@@ -7,6 +7,7 @@ import logging
 from spotipy import CacheHandler
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+from time import time
 
 class SpotifySettings:
     def __init__(self, tguserid):
@@ -98,10 +99,8 @@ def get_track_title(item):
     max_artist_len = max(25,50 - len(track))
     if len(artist) > max_artist_len:
         artist = artist[0:max_artist_len]
-        
-        
+                
     return f"{artist} - {track}"
-
 
 
 async def create_auth_manager(chat_id, client_id, client_secret):
@@ -123,7 +122,7 @@ async def init_auth_manager(chat_id, client_id, client_secret):
         'client_id': client_id,
         'client_secret': client_secret
     }
-    settings.rds.set(f"authmanager:{chat_id}", json.dumps(data))
+    settings.rds.hset(f"group:{chat_id}", "authmanager", json.dumps(data))
 
     return await create_auth_manager(chat_id, client_id, client_secret)
         
@@ -132,7 +131,7 @@ async def get_auth_manager(chat_id):
     """
     Create a spotify auth manager for a specific group
     """
-    data = settings.rds.get(f"authmanager:{chat_id}")
+    data = settings.rds.hget(f"group:{chat_id}","authmanager")
     if data is None:
         return None
 
@@ -145,12 +144,11 @@ async def delete_auth_manager(chat_id):
     """
     Removes an auth manager from our local store
     """
-    data = settings.rds.get(f"authmanager:{chat_id}")
+    data = settings.rds.hget(f"group:{chat_id}","authmanager")
     if data is None:
         return True
-
     
-    settings.rds.delete(f"authmanager:{chat_id}")
+    settings.rds.hdel(f"group:{chat_id}","authmanager")
     return True
 
 
@@ -170,3 +168,29 @@ async def get_spotify_settings(userid):
     if data is not None:
         sps.loadJson(data)
     return sps
+
+
+async def get_history(chat_id, maxlen):
+    rediskey = f"history:{chat_id}"
+    titles = []
+    for i in range(0, min(maxlen,settings.rds.llen(historykey))):
+        titles.append(settings.rds.lindex(rediskey, i).decode('utf-8'))
+    return titles
+
+async def update_history(chat_id, title):
+    rediskey = f"history:{chat_id}"
+    currenttitle = settings.rds.lindex(rediskey,0)
+
+    if currenttitle is None:
+        settings.rds.lpush(rediskey,title)
+    else:
+        currenttitle = currenttitle.decode('utf-8')
+        if currenttitle != title:
+            settings.rds.lpush(rediskey,title)
+            
+        if settings.rds.llen(rediskey) > 100:
+            settings.rds.rpop(rediskey)
+                    
+    # update last played entry
+    settings.rds.hset(f"lastplayed:{chat_id}",title,int(time()))
+        

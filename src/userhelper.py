@@ -58,6 +58,33 @@ def get_qrcode_filename(data):
             file.close()
     return filename
 
+
+async def get_group_owner(chat_id):
+    data = settings.rds.hget(f"group:{chat_id}","owner")
+    if data is None:
+        return None
+
+    userid = data.decode('utf-8')
+    rediskey = f"user:{userid}"
+
+    userdata = settings.rds.hget(user.rediskey,"userdata")
+    if userdata is None:
+        return None
+    
+    user.loadJson(userdata)
+    return user
+
+async def delete_group_owner(chat_id):
+    data = settings.rds.hdel(f"group:{chat_id}","owner")
+
+
+async def set_group_owner(chat_id, user):
+    data = settings.rds.hget(f"group:{chat_id}","owner")
+    if data is not None:
+        userid = data.decode('utf-8')
+        assert(user.id == user.id)
+    data = settings.rds.hset(f"group:{chat_id}","owner",user.id)
+
 async def get_or_create_user(userid,username):
     """
     Get or create a user in redis and lnbits and return the user object

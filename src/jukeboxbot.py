@@ -19,9 +19,6 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response, RedirectResponse
 from starlette.routing import Route
 
-# TODO: Invoices naar redis
-# 
-
 from telegram import __version__ as TG_VER
 
 try:
@@ -67,6 +64,7 @@ import spotifyhelper
 from spotifyhelper import SpotifySettings, CacheJukeboxHandler
 import settings
 import jukeboxtexts
+import invoicehelper
 
 jukeboxtexts.init()
 settings.init()
@@ -76,9 +74,6 @@ now_playing_message = {}
 
 # message debouncer to prevent processing the same message twice
 message_debounce = {}
-
-# dictionary of invoices
-invoices = {}
 
 def adminonly(func):
     """
@@ -191,6 +186,9 @@ async def disconnect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         # stop here
         return
+
+    # delete the owner of the group, all admins can do this
+    await userhelper.delete_group_owner(update.effective_chat.id)
     
     # delete auth manager
     result = await spotifyhelper.delete_auth_manager(update.effective_chat.id)
@@ -419,11 +417,10 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     sp = spotipy.Spotify(auth_manager=auth_manager)
         
     text = "Track history:\n"
-    historykey = f"history:{update.effective_chat.id}"
-    for i in range(0, min(20,settings.rds.llen(historykey))):
-        title = settings.rds.lindex(historykey, i).decode('utf-8')
-        text += f"{title}\n"            
-
+    history = await spotifyhelper.get_history(update.effective_chat_id,20)
+    for title in history:
+        text += f"{title}\n"
+        
     message = await context.bot.send_message(chat_id=update.effective_chat.id,text=text)    
     context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
     
@@ -486,6 +483,7 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text="Payment succes.")
         logging.info(f"User {user.userid} paid and invoice")
     else:
+        logging.warning(payment_result)
         # TODO, filter on the result detail. It may contain sensitive information
         await context.bot.send_message(
             chat_id=update.effective_user.id,
@@ -493,7 +491,6 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text="Payment failed.")
 
 # search for a track
-# TODO: no response in private chats
 @debounce
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -616,10 +613,11 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
     # get the receiving user and create an invoice
     recipient = await userhelper.get_or_create_user(update.message.reply_to_message.from_user.id,update.message.reply_to_message.from_user.username)
-    invoice = await settings.lnbits.createInvoice(recipient.invoicekey,amount,f"@{sender.username} thinks you're a DJ!",None)
+    invoice = await invoicehelper.create_invoice(recipient, amount, f"@{sender.username} thinks you're a DJ!" , None)
 
+    
     # pay the invoice
-    result = await settings.lnbits.payInvoice(invoice["payment_request"],sender.adminkey)
+    result = await invoicehelper.pay_invoice(sender, invoice)
     if result['result'] == True:
         # send message in the group chat
         message = await context.bot.send_message(
@@ -648,48 +646,47 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text=f"Payment failed. Sorry.")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
 
+async def callback_paid_invoice(invoice):
+       
+    auth_manager = await spotifyhelper.get_auth_manager(invoice.chat_id)
+    if auth_manager is None:
+        logging.error("No auth manager after succesfull payment")
+        return
+    
+    # add to the queue and inform others
+    sp = spotipy.Spotify(auth_manager=auth_manager)
+    spotifyhelper.add_to_queue(sp, invoice.spotify_uri_list)
+    await application.bot.send_message(
+        chat_id=invoice.chat_id,
+        parse_mode='HTML',
+        text=f"@{invoice.username} added {invoice.title} to the queue.")
+    await application.bot.send_message(
+        chat_id=invoice.userid,
+        parse_mode='HTML',
+        text=f"You paid {invoice.amount_to_pay} sats for {invoice.title}.")
+    
+    # delete the payment request message
+    await application.bot.delete_message(invoice.chat_id,invoice.message_id)
+    return
+    
 
 # periodic check for a paid invoice            
-async def callback_check_invoice(context: ContextTypes.DEFAULT_TYPE):
+async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
     # check if the invoice has been paid
-    if await settings.lnbits.checkInvoice(settings.lnbits._admin_invoicekey,context.job.data['payment_hash']) == True:
-        invoicekey = context.job.data['invoicekey']
-        if invoicekey in invoices:
-            del invoices[invoicekey]
-        
-        auth_manager = await spotifyhelper.get_auth_manager(context.job.data['chat_id'])
-        if auth_manager is None:
-            logging.error("No auth manager after succesfull payment")
-            return
+    cancel_invoice = context.job.data['cancel']
+    payment_hash = context.job.data['payment_hash']
+    invoice = invoicehelper.get_invoice(payment_hash)
 
-        # add to the queue and inform others
-        sp = spotipy.Spotify(auth_manager=auth_manager)
-        spotifyhelper.add_to_queue(sp, context.job.data['spotify_uri_list'])
-        await context.bot.send_message(
-            chat_id=context.job.data['chat_id'],
-            parse_mode='HTML',
-            text=f"@{context.job.data['username']} added {context.job.data['invoice_title']} to the queue.")
-        await context.bot.send_message(
-            chat_id=context.job.data['user_id'],
-            parse_mode='HTML',
-            text=f"You paid {context.job.data['amount_to_pay']} sats for {context.job.data['invoice_title']}.")
-
-        # delete the payment request message
-        await context.bot.delete_message(context.job.data['chat_id'],context.job.data['message_id'])
+    # cancel the invoice
+    if cancel_invoice == True:
+        if invoice is not None:
+            invoicehelper.delete_invoice(payment_request)
+            await context.bot.delete_message(invoice.chat_id,invoice.message_id)            
         return
 
-    # not yet paid, reschedule job or forget about it after some time
-    if context.job.data['timeout'] <= 0:
-        await context.bot.delete_message(context.job.data['chat_id'],context.job.data['message_id'])
-
-        # remove the invoice from our watchlist
-        invoicekey = context.job.data['invoicekey']
-        if invoicekey in invoices:
-            del invoices[invoicekey]
-    else:
-        interval = 5
-        context.job.data['timeout'] -= interval            
-        context.job_queue.run_once(callback_check_invoice, interval, data=context.job.data)
+    # check if invoice was paid
+    if invoicehelper.invoice_paid(invoice) == True:
+        callback_paid_invoice(invoice)
 
 async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
     # iterate over all auth managers
@@ -704,21 +701,8 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
         if currenttrack:
             title = spotifyhelper.get_track_title(currenttrack['item'])
 
-            # update and prune recent history
-            historykey = f"history:{chat_id}"
-            rds_title = settings.rds.lindex(historykey,0)
-            if rds_title is None:
-                settings.rds.lpush(historykey,title)
-            else:
-                rds_title = rds_title.decode('utf-8')
-                if rds_title != title:
-                    settings.rds.lpush(historykey,title)
-                    
-                if settings.rds.llen(historykey) > 100:
-                    settings.rds.rpop(historykey)
-                    
-            # update last played entry
-            settings.rds.hset(f"lastplayed:{chat_id}",title,int(time()))
+            # update history
+            await spotifyhelper.update_history(title)
 
         # update the title
         if chat_id in now_playing_message:
@@ -768,7 +752,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # the commands from here on modify a list of tracks to be queue
     # and we have to check hat we have spotify available
-    # get an auth managher, if no auth manager is available, dump a message
+    # get an auth managher, if no auth manager is available, dump a message    
     auth_manager = await spotifyhelper.get_auth_manager(update.effective_chat.id)
     if auth_manager is None:
         message = await context.bot.send_message(
@@ -781,7 +765,16 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # create spotify instance
     sp = spotipy.Spotify(auth_manager=auth_manager)
 
-    # TODO: verify that player is available, otherwise it has no use to queue a track
+    # verify that player is available, otherwise it has no use to queue a track
+    track = sp.current_user_playing_track()
+    if track is None:
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            parse_mode='HTML',
+            text="Player is not active at the moment. Payment aborted.")
+        context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
+        return
+    
                       
     # Play a random track from a playlist
     spotify_uri_list = []            
@@ -823,14 +816,18 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     for i in range(1,len(spotify_uri_list)):
         title += f",'{spotifyhelper.get_track_title(sp.track(spotify_uri_list[0]))}'"
 
-    # create the invoice 
-    invoice = await settings.lnbits.createInvoice(settings.lnbits._admin_invoicekey,amount_to_pay,invoice_title,None)
-    
+    # create the invoice
+    # TODO, admin is the owner of the group
+    # get the user the is owner of the group
+    # TODO: maak setowner command om een user owner van de groep te maken. Die kan spotify koppelen
+    recipient = await userhelper.get_group_owner(update.effective_chat.id)
+    invoice = await invoicehelper.create_invoice(recipient, amount_to_pay, invoice_title)
+        
     # get the user wallet and try to pay the invoice
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
 
     # pay the invoice
-    payment_result = await settings.lnbits.payInvoice(invoice['payment_request'],user.adminkey)
+    payment_result = await invoicehelper.pay_invoice(user, invoice)
 
     # if payment success
     if payment_result['result'] == True:
@@ -857,18 +854,25 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/payinvoice?payment_hash={invoice['payment_hash']}"),
             InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))
         ]]))
-    
-    invoice['extra'] = {
-        'chat_id': update.effective_chat.id,
-        'user_id': update.effective_user.id,
-        'username': update.effective_user.username,
-        'spotify_uri_list': spotify_uri_list,
-        'message_id': message.id,
-        'invoice_title': invoice_title
-    }
-    invoices[invoice['payment_hash']] = invoice
 
+
+    # add data to the invoice
+    invoice.recipient = recipient    
+    invoice.user = user
+    invoice.spotify_uri_list = spotify_uri_list
+    invoice.title = invoice_title
+    invoice.chat_id = update.effective_chat.id
+    invoice.message_id = message.id
+
+    # and save the invoice
+    invoicehelper.save_invoice(invoice)
+
+    # create a short timeout as fall back
+    context.job_queue.run_once(check_invoice_callback, settings.delete_message_timeout_medium, data={'payment_hash':invoice.payment_hash,'cancel':False})
     
+    # create a short timeout as fall back to cancel the invoice
+    context.job_queue.run_once(check_invoice_callback, settings.delete_message_timeout_long, data={'payment_hash':invoice.payment_hash,'cancel':True)
+
 
 async def main() -> None:
     """Set up the application and a custom webserver."""
@@ -920,14 +924,16 @@ async def main() -> None:
 
     async def invoicepaid_callback(request: Request) -> Response:
         data = await request.json()
-        print(data)
         payment_hash = data['payment_hash']
-        if payment_hash in invoices:
-            print(invoices[payment_hash])
-        else:
-            print("payment hash not in invoices")
-    
-        
+
+                            
+        invoice = await invoicehelper.get_invoice(payment_hash)
+        if invoice is None:
+             Response("Not found, probably paid or incorrect payment hash")
+
+        # process in the bot
+        await callback_paid_invoice(invoice)
+            
         return Response()
         
     async def payinvoice_callback(request: Request) -> Response:
@@ -935,9 +941,11 @@ async def main() -> None:
         if payment_hash not in invoices:
             return Response()
 
-        invoice = invoices[payment_hash]
+        invoice = invoicehelper.get_invoice(payment_hash)
+        if invoice is None:
+            return Response("Invoice not found")
 
-        return Response(f"Pay the following invoice<br><pre>{invoice['payment_request']}</pre>", media_type="text/html")
+        return Response(f"Pay the following invoice<br><pre>{invoice.payment_request}</pre>", media_type="text/html")
 
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """ 
@@ -970,11 +978,12 @@ async def main() -> None:
             return Response()
 
         try:
-            auth_manager = await spotifyhelper.get_auth_manager(chatid)
+            auth_manager = await spotifyhelper.get_auth_manager(chatid)                               
             if auth_manager is not None:
+                await userhelper.set_group_owner(chatid, userid)
                 await application.bot.send_message(
                     chat_id=userid,
-                    text=f"Spotify connected to the '{chatname}' chat. Execute the /disconnect command in the group to remove the authorisation.")
+                    text=f"Spotify connected to the '{chatname}' chat. All revenues of requested tracks are coming your way. Execute the /disconnect command in the group to remove the authorisation.")
         except:
             logging.error("Failure during auth_manager instantiation")
             return Response()
