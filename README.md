@@ -14,6 +14,8 @@ A Bitcoin lightning enabled Jukebox for Telegram
  - Create a welcome message for new users
 
 ## Ideas for new features
+ - Silent disco feature! 3-channels, crowd is the dj!
+ - Conferences, Bitcoin Amsterdam/Miami etc. 
  - One-to-one communication: Allow users to have a private conversation with to bot. Search for tracks, manage their playlist, add to queue. This one is important to create as it enables to create other features as described below. 
  - Curated playlists: User can create a playlist and make that public to the bot. Other users can vote for the playlist by paying sats. When a threshold is reached, the playlist is submitted to the queue. A percentage of the amount payed for the playlist goes to the creator of the playlist. 
  - Create a playlist: User can create a playlist by direct communication to the the bot. Basically a version of the /add command, but without playing. Playlists managed by the bot. 
