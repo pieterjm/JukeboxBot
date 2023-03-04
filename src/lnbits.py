@@ -33,17 +33,23 @@ class LNbits:
             return result
         
     # creat an lnbits invoice
-    async def createInvoice(self, invoicekey, amount, memo):    
+    async def createInvoice(self, invoicekey, amount, memo, extra):
+        payload ={
+            "out": False,
+            "amount": amount,
+            "memo": memo,
+            "internal": True,
+            "webhook": "http://127.0.0.1:7000/invoicecallback"
+        }
+        if extra is not None:
+            payload['extra'] = extra
+        
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.protocol}://{self.host}/api/v1/payments",
                 headers={'X-Api-Key':invoicekey},
-                json={
-                    "out": False,
-                    "amount": amount,
-                    "memo": memo,
-                    "internal": True
-                })        
+                json=payload)
+        
             return json.loads(response.text)
 
     # create a user and initial wallet
