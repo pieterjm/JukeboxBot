@@ -19,6 +19,9 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response, RedirectResponse
 from starlette.routing import Route
 
+# TODO: Invoices naar redis
+# 
+
 from telegram import __version__ as TG_VER
 
 try:
