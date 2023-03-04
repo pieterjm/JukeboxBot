@@ -616,7 +616,7 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
     # get the receiving user and create an invoice
     recipient = await userhelper.get_or_create_user(update.message.reply_to_message.from_user.id,update.message.reply_to_message.from_user.username)
-    invoice = await settings.lnbits.createInvoice(recipient.invoicekey,amount,f"@{sender.username} thinks you're a DJ!")
+    invoice = await settings.lnbits.createInvoice(recipient.invoicekey,amount,f"@{sender.username} thinks you're a DJ!",None)
 
     # pay the invoice
     result = await settings.lnbits.payInvoice(invoice["payment_request"],sender.adminkey)
@@ -824,9 +824,8 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         title += f",'{spotifyhelper.get_track_title(sp.track(spotify_uri_list[0]))}'"
 
     # create the invoice 
-    invoice = await settings.lnbits.createInvoice(settings.lnbits._admin_invoicekey,amount_to_pay,invoice_title)
+    invoice = await settings.lnbits.createInvoice(settings.lnbits._admin_invoicekey,amount_to_pay,invoice_title,None)
     
-
     # get the user wallet and try to pay the invoice
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
 
@@ -846,9 +845,8 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             text=f"You paid {amount_to_pay} sats for {invoice_title}.")
         return
 
-    # store the invoice in a list of open invoices
-    invoicekey = "".join(random.sample(string.ascii_letters,8))
-    invoices[invoicekey] = invoice
+    # store the invoice in a list of open invoices        
+    # add extra data 
     
     # we failed paying the invoice, popup the lnurlp
     message = await context.bot.send_message(
@@ -856,23 +854,21 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         text=f"@{update.effective_user.username} add '{invoice_title}' to the queue?\n\nThen pay the invoice of {amount_to_pay} sats.",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[        
-            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/payinvoice?invoicekey={invoicekey}"),
+            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/payinvoice?payment_hash={invoice['payment_hash']}"),
             InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))
         ]]))
-
-    # create a job to check the invoice
-    context.job_queue.run_once(callback_check_invoice, 5, data={
-        'invoicekey': invoicekey,
-        'payment_hash': invoice['payment_hash'],
-        'user_id':update.effective_user.id,
+    
+    invoice['extra'] = {
+        'chat_id': update.effective_chat.id,
+        'user_id': update.effective_user.id,
         'username': update.effective_user.username,
-        'invoice_title': invoice_title,
-        'amount_to_pay': amount_to_pay,
         'spotify_uri_list': spotify_uri_list,
         'message_id': message.id,
-        'chat_id': update.effective_chat.id,
-        'timeout': 180        
-        })
+        'invoice_title': invoice_title
+    }
+    invoices[invoice['payment_hash']] = invoice
+
+    
 
 async def main() -> None:
     """Set up the application and a custom webserver."""
@@ -922,12 +918,24 @@ async def main() -> None:
                 )
         return Response()
 
+    async def invoicepaid_callback(request: Request) -> Response:
+        data = await request.json()
+        print(data)
+        payment_hash = data['payment_hash']
+        if payment_hash in invoices:
+            print(invoices[payment_hash])
+        else:
+            print("payment hash not in invoices")
+    
+        
+        return Response()
+        
     async def payinvoice_callback(request: Request) -> Response:
-        invoicekey = request.query_params["invoicekey"]
-        if invoicekey not in invoices:
+        payment_hash = request.query_params["payment_hash"]
+        if payment_hash not in invoices:
             return Response()
 
-        invoice = invoices[invoicekey]
+        invoice = invoices[payment_hash]
 
         return Response(f"Pay the following invoice<br><pre>{invoice['payment_request']}</pre>", media_type="text/html")
 
@@ -998,7 +1006,8 @@ async def main() -> None:
             Route("/telegram", telegram, methods=["POST"]),
             Route("/lnbitscallback", lnbits_lnurlp_callback, methods=["POST"]),
             Route("/spotifycallback", spotify_callback, methods=["GET"]),
-            Route("/payinvoice",payinvoice_callback, methods=["GET"])
+            Route("/payinvoice",payinvoice_callback, methods=["GET"]),
+            Route("/invoicecallback",invoicepaid_callback, methods=["POST"]),
         ]
     )
 
