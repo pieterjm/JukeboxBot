@@ -988,7 +988,7 @@ async def main() -> None:
 """, media_type="text/html")
     
 
-    async def jukebox_status(request: Request) -> Response:
+    async def jukebox_status(request: Request) -> PlainTextResponse:
         if 'chat_id' not in request.query_params:
             return Response({})
         
@@ -996,7 +996,7 @@ async def main() -> None:
 
         auth_manager = await spotifyhelper.get_auth_manager(chat_id)                               
         if auth_manager is None:
-            return Response("""{
+            return PlainTextResponse("""{
                 "title":"Nothing is playing at the moment."
             }""", media_type="application/json")
 
@@ -1008,7 +1008,7 @@ async def main() -> None:
         title = "Nothing is playing at the moment"    
         if track:                    
             title = spotifyhelper.get_track_title(track['item'])       
-        return Response(f'{{"title":{title}}}',media_type="application/json")
+        return PlainTextResponse(f'{{"title":"{title}"}}',media_type="application/json")
 
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """ 
