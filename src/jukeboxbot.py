@@ -222,7 +222,7 @@ async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=update.effective_user.id,
             parse_mode='HTML',
             text="""
-To connect this bot to your spotify account, you have to create an app in the developer portal of Spotify <A href="https://developer.spotify.com/dashboard/applications">here</a>.<br>
+To connect this bot to your spotify account, you have to create an app in the developer portal of Spotify <A href="https://developer.spotify.com/dashboard/applications">here</a>.
 
 1. Click on the 'Create an app' button and give the bot a random name and description. Then click 'Create".
 
