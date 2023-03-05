@@ -415,7 +415,7 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     sp = spotipy.Spotify(auth_manager=auth_manager)
         
     text = "Track history:\n"
-    history = await spotifyhelper.get_history(update.effective_chat_id,20)
+    history = await spotifyhelper.get_history(update.effective_chat.id,20)
     for title in history:
         text += f"{title}\n"
         
