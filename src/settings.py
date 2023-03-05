@@ -4,6 +4,7 @@ from lnbits import LNbits
 import os
 import random
 import string
+from time import time
 
 def init():
     global environment
@@ -48,51 +49,35 @@ def init():
     # webserver port
     port = 7000
     
+    price = 21
+    fund_max = 100 * price
+    fund_min = price
+    rds = redis.Redis(db=2)
+    lnbits_public_host='bot.wholestack.nl'
+    lnbits = LNbits(
+        os.environ['LNBITS_PROTOCOL'],
+        os.environ['LNBITS_HOST'],
+        os.environ['LNBITS_ADMINKEY'],
+        os.environ['LNBITS_INVOICEKEY'],
+        os.environ['LNBITS_USRKEY'])
+    bot_url="https://bot.wholestack.nl/"        
+    bot_token=os.environ['BOT_TOKEN']
+    qrcode_path = '/tmp'
+
+
     environment = env
     if env == 'production':    
-        rds = redis.Redis(db=0)
-        price = os.environ['REQUEST_PRICE']
-        fund_max = 100 * price
-        fund_min = price
-        lnbits = LNbits(
-            os.environ['LNBITS_PROTOCOL'],
-            os.environ['LNBITS_HOST'],
-            os.environ['LNBITS_ADMINKEY'],
-            os.environ['LNBITS_INVOICEKEY'],
-            os.environ['LNBITS_USRKEY'])
-        bot_url="https://bot.wholestack.nl/"
-        lnbits_public_host='bot.wholestack.nl'
-        bot_token = os.environ['BOT_TOKEN']
-        qrcode_path= '/tmp'
         logging.basicConfig(
             filename="logfile_{time}.dat".format(time=time()),
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             level=logging.INFO
-            )
-
+        )
         return True
     elif env == 'development':
-        price = 21
-        fund_max = 100 * price
-        fund_min = price
-        rds = redis.Redis(db=2)
-        lnbits_public_host='bot.wholestack.nl'
-        lnbits = LNbits(
-            os.environ['LNBITS_PROTOCOL'],
-            os.environ['LNBITS_HOST'],
-            os.environ['LNBITS_ADMINKEY'],
-            os.environ['LNBITS_INVOICEKEY'],
-            os.environ['LNBITS_USRKEY'])
-        bot_url="https://bot.wholestack.nl/"        
-        bot_token=os.environ['BOT_TOKEN']
-        qrcode_path = '/tmp'
         logging.basicConfig(
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             level=logging.INFO
         )
-
-
-
         return True
     else:
         print("unknown environment")

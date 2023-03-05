@@ -190,8 +190,6 @@ async def disconnect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     # delete the owner of the group, all admins can do this
     await userhelper.delete_group_owner(update.effective_chat.id)
-    
-    # delete auth manager
     result = await spotifyhelper.delete_auth_manager(update.effective_chat.id)
     
     # get an auth manager, if no auth manager is available, dump a message

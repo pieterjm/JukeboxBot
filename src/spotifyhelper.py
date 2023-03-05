@@ -12,19 +12,15 @@ from time import time
 class SpotifySettings:
     def __init__(self, tguserid):
         self.userid = tguserid
-        self.chatid = None
         self.userkey = f"user:{self.userid}"        
         self.client_secret = None
         self.client_id = None
-        self.token = None
 
     def toJson(self):
         data = {
             'telegram_userid': self.userid,
             'client_secret': self.client_secret,
-            'client_id': self.client_id,
-            'token': self.token,
-            'chatid': self.chatid
+            'client_id': self.client_id
         }
         return json.dumps(data)
 
@@ -39,12 +35,6 @@ class SpotifySettings:
 
         if 'client_id' in obj:
             self.client_id = obj['client_id']
-
-        if 'token' in obj:
-            self.token = obj['token']
-    
-        if 'chatid' in obj:
-            self.chatid = obj['token']
             
 class CacheJukeboxHandler(CacheHandler):
     """
@@ -53,6 +43,7 @@ class CacheJukeboxHandler(CacheHandler):
     def __init__(self, chat_id):
         self.chat_id = chat_id
         self.rediskey = f"spotify_token:{self.chat_id}"
+        self.token = None
 
     def get_cached_token(self):
         logging.info("Obtain cached token")
