@@ -1008,9 +1008,7 @@ async def main() -> None:
         title = "Nothing is playing at the moment"    
         if track:                    
             title = spotifyhelper.get_track_title(track['item'])       
-        return Response(f"""{
-            "title":{title}
-        }""",media_type="application/json")
+        return Response(f'{{"title":{title}}}',media_type="application/json")
 
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """ 
