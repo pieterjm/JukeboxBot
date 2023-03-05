@@ -979,7 +979,7 @@ async def main() -> None:
 </head>
 <body>
 <h2>Add '{invoice.title}' to the queue?</h2>
-<a href="lightning:{invoice.payment_request}"><img src="https://bot.wholestack.nl/api/v1/qrcode/ligtning:{invoice.payment_request}"></a>
+<a href="lightning:{invoice.payment_request}"><img src="https://bot.wholestack.nl/api/v1/qrcode/{invoice.payment_request}"></a>
 <p style="word-break: break-all;">
 {invoice.payment_request}
 </p>
