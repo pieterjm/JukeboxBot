@@ -16,7 +16,7 @@ import string
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response, RedirectResponse, JSONResponse
+from starlette.responses import PlainTextResponse, Response, RedirectResponse
 from starlette.routing import Route
 
 from telegram import __version__ as TG_VER
@@ -931,11 +931,11 @@ async def main() -> None:
     application.job_queue.run_repeating(callback_spotify, 10)
 
     # Pass webhook settings to telegram
-    await application.bot.set_webhook(
+    print(await application.bot.set_webhook(
         url=f"https://bot.wholestack.nl/jukebox/telegram",
         allowed_updates=['callback_query','message'],
         secret_token=settings.secret_token
-    )
+    ))
 
     # Set up webserver
     async def telegram(request: Request) -> Response:
@@ -988,17 +988,17 @@ async def main() -> None:
 """, media_type="text/html")
     
 
-    async def jukebox_status(request: Request) -> JSONResponse:
+    async def jukebox_status(request: Request) -> Response:
         if 'chat_id' not in request.query_params:
-            return JSONResponse({})
+            return Response({})
         
         chat_id = request.query_params["chat_id"]
 
         auth_manager = await spotifyhelper.get_auth_manager(chat_id)                               
         if auth_manager is None:
-            return JSONResponse({
+            return Response("""{
                 "title":"Nothing is playing at the moment."
-            })
+            }""", media_type="application/json")
 
         # create spotify instance
         sp = spotipy.Spotify(auth_manager=auth_manager)
@@ -1008,9 +1008,9 @@ async def main() -> None:
         title = "Nothing is playing at the moment"    
         if track:                    
             title = spotifyhelper.get_track_title(track['item'])       
-        return JSONResponse({
-            "title":title
-        })
+        return Response(f"""{
+            "title":{title}
+        }""",media_type="application/json")
 
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """ 
