@@ -882,7 +882,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # we failed paying the invoice, popup the lnurlp
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"@{update.effective_user.username} add '{invoice_title}' to the queue?\n\nThen pay the invoice of {amount_to_pay} sats.",
+        text=f"@{update.effective_user.username} add '{invoice_title}' to the queue?\n\nClick to pay below or fund the bot with /fund@Jukebox_Lightning_bot.",       
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[        
             InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/jukebox/payinvoice?payment_hash={invoice.payment_hash}"),
