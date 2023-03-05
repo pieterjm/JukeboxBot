@@ -357,8 +357,7 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def spotify_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.chat.type != "private":
         bot_me = await context.bot.get_me()
-        print(f"https://t.me/{bot_me.username}")
-        
+               
         # direct the user to their private chat
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
