@@ -52,14 +52,14 @@ class CacheJukeboxHandler(CacheHandler):
     """    
     def __init__(self, chat_id):
         self.chat_id = chat_id
-        self.key = f"spotify_token:{self.chat_id}"
+        self.rediskey = f"spotify_token:{self.chat_id}"
 
     def get_cached_token(self):
         logging.info("Obtain cached token")
         token_info = None
     
         try:
-            token_info = settings.rds.get(self.key)
+            token_info = settings.rds.get(self.rediskey)
             if token_info:
                 return json.loads(token_info)
         except RedisError as e:
@@ -71,11 +71,9 @@ class CacheJukeboxHandler(CacheHandler):
     def save_token_to_cache(self, token_info):
         logging.info("saving token to cache")
         try:
-            settings.rds.set(self.key, json.dumps(token_info))
+            settings.rds.set(self.rediskey, json.dumps(token_info))
         except RedisError as e:
             logging.warning('Error saving token to cache: ' + str(e))
-
-
 
 def add_to_queue(sp, spotify_uri_list):
     """

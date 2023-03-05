@@ -1023,6 +1023,7 @@ async def main() -> None:
         try:
             auth_manager = await spotifyhelper.get_auth_manager(chatid)                               
             if auth_manager is not None:
+                print(auth_manager.get_access_token(code))     
                 await userhelper.set_group_owner(chatid, userid)
                 await application.bot.send_message(
                     chat_id=userid,
