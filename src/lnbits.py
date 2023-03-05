@@ -47,7 +47,7 @@ class LNbits:
             "out": False,
             "amount": amount,
             "memo": memo,
-            "webhook": "http://127.0.0.1:7000/invoicecallback"
+            "webhook": "http://127.0.0.1:7000/jukebox/invoicecallback"
         }
         if extra is not None:
             payload['extra'] = extra
