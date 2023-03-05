@@ -2,6 +2,7 @@ import redis
 from redis import RedisError
 import asyncio
 from lnbits import LNbits
+from userhelper import User
 import settings
 import json
 import logging
@@ -63,16 +64,15 @@ class Invoice:
         self.message_id = data['message_id']
 
 # Get/Create a QR code and store in filename
-async def create_invoice(user, amount, memo):
+async def create_invoice(user: User, amount: int, memo: str) -> Invoice:
     lnbits_invoice = await settings.lnbits.createInvoice(user.invoicekey,amount,memo)
     invoice = Invoice(lnbits_invoice['payment_hash'],lnbits_invoice['payment_request'])
     return invoice
 
 
-async def pay_invoice(user, invoice):
+async def pay_invoice(user: User, invoice: Invoice):
+    assert(user is not None)
     assert(invoice is not None)
-    assert(user it not None)
-
     result = settings.lnbits.payInvoice(invoice.payment_request,user.adminkey)
 
     if result['result'] == True:
@@ -86,10 +86,10 @@ async def pay_invoice(user, invoice):
             'detail': 'Payment failed'
         }
 
-async def save_invoice(invoice):
+async def save_invoice(invoice: Invoice) -> None:
     settings.rds.set(invoice.rediskey,invoice.toJson())
             
-async def delete_invoice(invoice):
+async def delete_invoice(invoice: Invoice) -> bool:
     data = settings.rds.get(invoice.rediskey)
     if data is None:
         return True
@@ -97,8 +97,8 @@ async def delete_invoice(invoice):
     settings.rds.delete(invoice.rediskey)
     return True
     
-async def invoice_paid(invoice):
-    result = await settings.lnbits.checkInvoice(invoice.recipient.invoiceky,invoice.payment_hash)context.job.data['payment_hash'])
+async def invoice_paid(invoice: Invoice) -> bool:
+    result = await settings.lnbits.checkInvoice(invoice.recipient.invoicekey,invoice.payment_hash)
     if result == True:
         await delete_invoice(invoice)
         return True
@@ -106,7 +106,7 @@ async def invoice_paid(invoice):
         return False
 
 
-async def get_invoice(payment_hash):
+async def get_invoice(payment_hash: str) -> Invoice:
     """
     load invoice from redis
     """

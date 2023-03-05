@@ -10,7 +10,7 @@ import os
 from time import time
 
 class User:
-    def __init__(self, tguserid, tgusername):
+    def __init__(self, tguserid: int, tgusername:str = None) -> None:
         self.userid = tguserid
         self.username = tgusername
         self.rediskey = f"user:{self.userid}"
@@ -21,7 +21,7 @@ class User:
         self.lnurlp = None
         self.lndhub = None
 
-    def toJson(self):
+    def toJson(self) -> str:
         userdata = {
             'telegram_userid':self.userid,
             'lnbits_userid':self.lnbitsuserid,
@@ -34,7 +34,7 @@ class User:
         }
         return json.dumps(userdata)
         
-    def loadJson(self, data):
+    def loadJson(self, data: str) -> None:
         assert(data is not None)
         userdata = json.loads(data)
         assert(userdata is not None)
@@ -52,7 +52,7 @@ class User:
         self.lnbitsuserid = userdata['lnbits_userid']
 
 # Get/Create a QR code and store in filename
-def get_qrcode_filename(data):
+def get_qrcode_filename(data: str) -> str:
     filename = os.path.join(settings.qrcode_path,"{}.png".format(hash(data)))
     if not os.path.isfile(filename):
         img = qrcode.make(data)
@@ -63,7 +63,7 @@ def get_qrcode_filename(data):
     return filename
 
 
-async def get_group_owner(chat_id):
+async def get_group_owner(chat_id: int) -> User:
     data = settings.rds.hget(f"group:{chat_id}","owner")
     if data is None:
         return None
@@ -79,21 +79,21 @@ async def get_group_owner(chat_id):
     user.loadJson(userdata)
     return user
 
-async def delete_group_owner(chat_id):
+async def delete_group_owner(chat_id: int) -> None:
     data = settings.rds.hdel(f"group:{chat_id}","owner")
 
-async def get_balance(user):
+async def get_balance(user:User) -> int:
     return settings.lnbits.getBalance(user.invoicekey)
 
 
-async def set_group_owner(chat_id, user):
+async def set_group_owner(chat_id: int, user: User):
     data = settings.rds.hget(f"group:{chat_id}","owner")
     if data is not None:
         userid = data.decode('utf-8')
         assert(user.id == user.id)
     data = settings.rds.hset(f"group:{chat_id}","owner",user.id)
 
-async def get_or_create_user(userid,username):
+async def get_or_create_user(userid: int,username: str) -> User:
     """
     Get or create a user in redis and lnbits and return the user object
     """    

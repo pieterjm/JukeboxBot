@@ -645,7 +645,6 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
 
 async def callback_paid_invoice(invoice):
-       
     auth_manager = await spotifyhelper.get_auth_manager(invoice.chat_id)
     if auth_manager is None:
         logging.error("No auth manager after succesfull payment")
@@ -874,6 +873,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def main() -> None:
     """Set up the application and a custom webserver."""
+    global application
 
     # Here we set updater to None because we want our custom webhook server to handle the updates
     # and hence we don't need an Updater instance
@@ -884,8 +884,6 @@ async def main() -> None:
     application.bot_data["url"] = settings.bot_url
 
     # register handlers
-
-
     application.add_handler(CommandHandler('add', search))  # search for a track
     application.add_handler(CommandHandler('balance', balance)) # view wallet balance
     application.add_handler(CommandHandler('connect', connect)) # connect to spotify account
