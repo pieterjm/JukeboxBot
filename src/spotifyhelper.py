@@ -173,11 +173,11 @@ async def get_spotify_settings(userid):
 async def get_history(chat_id, maxlen):
     rediskey = f"history:{chat_id}"
     titles = []
-    for i in range(0, min(maxlen,settings.rds.llen(historykey))):
+    for i in range(0, min(maxlen,settings.rds.llen(rediskey))):
         titles.append(settings.rds.lindex(rediskey, i).decode('utf-8'))
     return titles
 
-async def update_history(chat_id, title):
+async def update_history(chat_id: int, title: str) -> None:
     rediskey = f"history:{chat_id}"
     currenttitle = settings.rds.lindex(rediskey,0)
 

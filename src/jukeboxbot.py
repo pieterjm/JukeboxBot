@@ -701,7 +701,7 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
             title = spotifyhelper.get_track_title(currenttrack['item'])
 
             # update history
-            await spotifyhelper.update_history(title)
+            await spotifyhelper.update_history(chat_id, title)
 
         # update the title
         if chat_id in now_playing_message:
