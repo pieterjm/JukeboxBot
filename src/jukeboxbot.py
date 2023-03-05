@@ -715,7 +715,7 @@ async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
 
 async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
     # iterate over all auth managers
-    for key in settings.rds.scan_iter("authmanager:*"):
+    for key in settings.rds.scan_iter("group:*"):
         chat_id = key.decode('utf-8').split(':')[1]
         auth_manager = await spotifyhelper.get_auth_manager(chat_id)
         if auth_manager is None:
