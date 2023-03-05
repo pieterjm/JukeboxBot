@@ -43,9 +43,7 @@ class User:
             logging.error(self.userid)
             return
         
-        if self.username is not None:
-            assert(self.username == userdata['telegram_username'])
-        else:
+        if self.username is None:
             self.username = userdata['telegram_username']
         self.invoicekey = userdata['invoicekey']
         self.adminkey = userdata['adminkey']

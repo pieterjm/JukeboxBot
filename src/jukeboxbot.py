@@ -16,7 +16,7 @@ import string
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response, RedirectResponse
+from starlette.responses import PlainTextResponse, Response, RedirectResponse, JSONResponse
 from starlette.routing import Route
 
 from telegram import __version__ as TG_VER
@@ -987,6 +987,31 @@ async def main() -> None:
 </body>
 </html>
 """, media_type="text/html")
+    
+
+    async def jukebox_status(request: Request) -> JSONResponse:
+        if 'chat_id' not in request.query_params:
+            return JSONResponse({})
+        
+        chat_id = request.query_params["chat_id"]
+
+        auth_manager = await spotifyhelper.get_auth_manager(chat_id)                               
+        if auth_manager is None:
+            return JSONResponse({
+                "title":"Nothing is playing at the moment."
+            })
+
+        # create spotify instance
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+    
+        # get the current track
+        track = sp.current_user_playing_track()
+        title = "Nothing is playing at the moment"    
+        if track:                    
+            title = spotifyhelper.get_track_title(track['item'])       
+        return JSONResponse({
+            "title":title
+        })
 
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """ 
@@ -1061,6 +1086,7 @@ async def main() -> None:
             Route("/jukebox/spotify", spotify_callback, methods=["GET"]),
             Route("/jukebox/payinvoice",payinvoice_callback, methods=["GET"]),
             Route("/jukebox/invoicecallback",invoicepaid_callback, methods=["POST"]),
+            Route("/jukebox/status.json",jukebox_status, methods=["GET"])
         ]
     )
 
