@@ -146,7 +146,7 @@ async def get_or_create_user(userid: int,username: str) -> User:
         await settings.lnbits.enableExtension("lndhub",user.lnbitsuserid)
     
         # create lndhub link
-        user.lndhub = f"lndhub://admin:{user.adminkey}@https://lnbits.wholestack.nl/lndhub/ext/"
+        user.lndhub = f"lndhub://admin:{user.adminkey}@https://bot.wholestack.nl/lndhub/ext/"
 
         # create lnurlp link
         lnurlpid = await settings.lnbits.createLnurlp(user.adminkey,{
@@ -155,9 +155,9 @@ async def get_or_create_user(userid: int,username: str) -> User:
             "max": settings.fund_max,
             "min": settings.fund_min,
             "comment_chars": 0,
-            "webhook_url": f"https://bot.wholestack.nl/lnbitscallback?userid={user.userid}"
+            "webhook_url": f"https://bot.wholestack.nl/jukebox/lnbitscallback?userid={user.userid}"
         })
-        user.lnurlp = f"https://lnbits.wholestack.nl/lnurlp/link/{lnurlpid}"    
+        user.lnurlp = f"https://bot.wholestack.nl/lnurlp/link/{lnurlpid}"    
 
         # save parameters
         settings.rds.hset(user.rediskey,"userdata",user.toJson())

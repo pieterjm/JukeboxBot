@@ -217,6 +217,25 @@ async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     # this command has to be execute from within a group
     if update.message.chat.type == "private":
+
+        await context.bot.send_message(
+            chat_id=update.effective_user.id,
+            parse_mode='HTML',
+            text="""
+To connect this bot to your spotify account, you have to create an app in the developer portal of Spotify <A href="https://developer.spotify.com/dashboard/applications">here</a>.<br>
+
+1. Click on the 'Create an app' button and give the bot a random name and description. Then click 'Create".
+
+2. Record the 'Client ID' and 'Client Secret'. 
+
+3. Click 'Edit Settings' and add EXACTLY this url <pre>https://bot.wholestack.nl/jukebox/spotify</pre> under 'Redirect URIs'. Do not forget to click 'Add' and 'Save'
+
+4. Use the /setclientid and /setclientsecret commands to configure the 'Client ID' and 'Client Secret'. 
+
+5. Give the '/connect' command in the group that you want to connect to your account. That will redirect you to an authorisation page.
+ 
+""")
+        
         # check that client_id is not None
         if sps.client_id is None:
             await context.bot.send_message(
@@ -866,7 +885,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         text=f"@{update.effective_user.username} add '{invoice_title}' to the queue?\n\nThen pay the invoice of {amount_to_pay} sats.",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[        
-            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/payinvoice?payment_hash={invoice.payment_hash}"),
+            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/jukebox/payinvoice?payment_hash={invoice.payment_hash}"),
             InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))
         ]]))
 
@@ -974,7 +993,7 @@ async def main() -> None:
 
         A typical request will like like the following
 
-        GET /spotifycallback?code=AQB5sDUcKql9oULl10ftgo9Lhmyzr3lpMRQl7i65drdM4WGaWvfx9ANBcUXVg-yR1FAqS2_yINbf6ej41lNr9ghmBGik0Bjwcgf90yxYLgk_H5c_ZcV2AKz9-eiqsnjZxqVoJyWqc5LnRHn0aEGG8YwBsk5ZHKIQh82uHikDZyAxKSCdLGCIaPbQtNUR0ej8WZH1y_gg_YOJa5aoC-f4ODJYOrokOTolxnlEy3zaJvddOgCF_GC8Fd9upxmovV5JR8LfACvrurjGYW7MaGeDKWMCb29GNXtg3lovTh2rwzE HTTP/1.0
+        GET /jukebox/spotify?code=AQB5sDUcKql9oULl10ftgo9Lhmyzr3lpMRQl7i65drdM4WGaWvfx9ANBcUXVg-yR1FAqS2_yINbf6ej41lNr9ghmBGik0Bjwcgf90yxYLgk_H5c_ZcV2AKz9-eiqsnjZxqVoJyWqc5LnRHn0aEGG8YwBsk5ZHKIQh82uHikDZyAxKSCdLGCIaPbQtNUR0ej8WZH1y_gg_YOJa5aoC-f4ODJYOrokOTolxnlEy3zaJvddOgCF_GC8Fd9upxmovV5JR8LfACvrurjGYW7MaGeDKWMCb29GNXtg3lovTh2rwzE HTTP/1.0
         """
 
         logging.info("Got callback from spotify")
@@ -1034,11 +1053,11 @@ async def main() -> None:
 
     starlette_app = Starlette(
         routes=[
-            Route("/telegram", telegram, methods=["POST"]),
-            Route("/lnbitscallback", lnbits_lnurlp_callback, methods=["POST"]),
-            Route("/spotifycallback", spotify_callback, methods=["GET"]),
-            Route("/payinvoice",payinvoice_callback, methods=["GET"]),
-            Route("/invoicecallback",invoicepaid_callback, methods=["POST"]),
+            Route("/jukebox/telegram", telegram, methods=["POST"]),
+            Route("/jukebox/lnbitscallback", lnbits_lnurlp_callback, methods=["POST"]),
+            Route("/jukebox/spotify", spotify_callback, methods=["GET"]),
+            Route("/jukebox/payinvoice",payinvoice_callback, methods=["GET"]),
+            Route("/jukebox/invoicecallback",invoicepaid_callback, methods=["POST"]),
         ]
     )
 

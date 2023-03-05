@@ -43,6 +43,7 @@ def init():
 
     # set secret token for telegram
     secret_token = "".join(random.sample(string.ascii_letters,12))
+    spotify_redirect_uri='https://bot.wholestack.nl/spotifycallback' # this must literaly match the config in spotify
     
     # webserver port
     port = 7000
@@ -60,11 +61,9 @@ def init():
             os.environ['LNBITS_INVOICEKEY'],
             os.environ['LNBITS_USRKEY'])
         bot_url="https://bot.wholestack.nl/"
-        lnbits_public_host='lnbits.wholestack.nl'
-        spotify_redirect_uri=f'{bot_url}/spotifycallback'
+        lnbits_public_host='bot.wholestack.nl'
         bot_token = os.environ['BOT_TOKEN']
         qrcode_path= '/tmp'
-
         logging.basicConfig(
             filename="logfile_{time}.dat".format(time=time()),
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -77,15 +76,14 @@ def init():
         fund_max = 100 * price
         fund_min = price
         rds = redis.Redis(db=2)
-        lnbits_public_host='lnbits.wholestack.nl'
+        lnbits_public_host='bot.wholestack.nl'
         lnbits = LNbits(
             os.environ['LNBITS_PROTOCOL'],
             os.environ['LNBITS_HOST'],
             os.environ['LNBITS_ADMINKEY'],
             os.environ['LNBITS_INVOICEKEY'],
             os.environ['LNBITS_USRKEY'])
-        bot_url="https://bot.wholestack.nl/"
-        spotify_redirect_uri='https://bot.wholestack.nl/spotifycallback' # this must literaly match the config in spotify
+        bot_url="https://bot.wholestack.nl/"        
         bot_token=os.environ['BOT_TOKEN']
         qrcode_path = '/tmp'
         logging.basicConfig(
