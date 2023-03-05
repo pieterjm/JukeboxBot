@@ -690,9 +690,11 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
     for key in settings.rds.scan_iter("authmanager:*"):
         chat_id = key.decode('utf-8').split(':')[1]
         auth_manager = await spotifyhelper.get_auth_manager(chat_id)
+        if auth_manager is None:
+            continue
+
         sp = spotipy.Spotify(auth_manager=auth_manager)
         currenttrack = sp.current_user_playing_track()
-
 
         title = "Nothing playing at the moment"
         if currenttrack:
