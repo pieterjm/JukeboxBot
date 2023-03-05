@@ -91,7 +91,7 @@ async def set_group_owner(chat_id: int, user: User) -> None:
     if data is not None:
         userid = data.decode('utf-8')
         assert(userid == user.userid)
-    data = settings.rds.hset(f"group:{chat_id}","owner",user.id)
+    data = settings.rds.hset(f"group:{chat_id}","owner",user.userid)
 
 async def get_or_create_user(userid: int,username: str) -> User:
     """

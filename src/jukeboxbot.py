@@ -980,7 +980,7 @@ async def main() -> None:
                 await application.bot.send_message(
                     chat_id=userid,
                     text=f"Spotify connected to the '{chatname}' chat. All revenues of requested tracks are coming your way. Execute the /disconnect command in the group to remove the authorisation.")
-        except Exception as e:
+        except Exception as e:            
             logging.error(e)
             logging.error("Failure during auth_manager instantiation")
             return Response()
