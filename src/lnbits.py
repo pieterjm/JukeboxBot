@@ -23,7 +23,7 @@ class LNbits:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.protocol}://{self.host}/api/v1/payments",
-                json = {"out": True, "internal": True, "bolt11": invoice },
+                json = {"out": True, "bolt11": invoice },
                 headers = {"X-Api-Key": adminkey})
             result = json.loads(response.text)
             if "payment_hash" in result:
@@ -47,7 +47,6 @@ class LNbits:
             "out": False,
             "amount": amount,
             "memo": memo,
-            "internal": True,
             "webhook": "http://127.0.0.1:7000/invoicecallback"
         }
         if extra is not None:
