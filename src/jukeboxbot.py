@@ -935,7 +935,7 @@ async def main() -> None:
 
     # Pass webhook settings to telegram
     await application.bot.set_webhook(
-        url=f"{settings.bot_url}/telegram",
+        url=f"https://bot.wholestack.nl/jukebox/telegram",
         allowed_updates=['callback_query','message'],
         secret_token=settings.secret_token
     )
