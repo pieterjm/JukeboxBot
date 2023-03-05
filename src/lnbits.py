@@ -28,12 +28,21 @@ class LNbits:
             result = json.loads(response.text)
             if "payment_hash" in result:
                 result['result'] = True
-            else:
+            else:            
                 result['result'] = False
+                if result['detail'] ==  'Insufficient balance.': 
+                    pass
+                elif result['detail'].startswith('(sqlite3.IntegrityError) UNIQUE constraint failed'):
+                    result['detail'] = 'Duplicate invoice, payment failed.'
+                else:    
+                    logging.info(result)
+                    result['detail'] = 'Payment failed.'
+
+
             return result
         
     # creat an lnbits invoice
-    async def createInvoice(self, invoicekey, amount, memo, extra):
+    async def createInvoice(self, invoicekey, amount, memo, extra = None):
         payload ={
             "out": False,
             "amount": amount,

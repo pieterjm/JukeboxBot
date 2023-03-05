@@ -20,7 +20,7 @@ The NOSTR pubkey of NoderunnersFM is: npub1ua6fxn9ktc4jncanf79jzvklgjftcdrt5etve
 
     # when someone executes the balance command in a group
     global balance_in_group
-    balance_in_group = "Like keeping your mnenomic seedphrase offline, it is better to query your balance in a private chat with me.",
+    balance_in_group = "Like keeping your mnenomic seedphrase offline, it is better to query your balance in a private chat with me."
 
     # when someone executes the disconnect command in a private chat
     global disconnect_in_private_chat

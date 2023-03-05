@@ -65,6 +65,7 @@ from spotifyhelper import SpotifySettings, CacheJukeboxHandler
 import settings
 import jukeboxtexts
 import invoicehelper
+from invoicehelper import Invoice
 
 jukeboxtexts.init()
 settings.init()
@@ -486,7 +487,7 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.send_message(
             chat_id=update.effective_user.id,
             parse_mode='HTML',
-            text="Payment failed.")
+            text=payment_result['detail'])
 
 # search for a track
 @debounce
@@ -611,9 +612,10 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
     # get the receiving user and create an invoice
     recipient = await userhelper.get_or_create_user(update.message.reply_to_message.from_user.id,update.message.reply_to_message.from_user.username)
-    invoice = await invoicehelper.create_invoice(recipient, amount, f"@{sender.username} thinks you're a DJ!" , None)
+    invoice = await invoicehelper.create_invoice(recipient, amount, f"@{sender.username} thinks you're a DJ!" )
+    invoice.recipient = recipient
+    invoice.user = sender    
 
-    
     # pay the invoice
     result = await invoicehelper.pay_invoice(sender, invoice)
     if result['result'] == True:
@@ -644,7 +646,14 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text=f"Payment failed. Sorry.")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
 
-async def callback_paid_invoice(invoice):
+async def callback_paid_invoice(invoice: Invoice):
+    if invoice is None:
+        logging.error("Invoice is None")
+        return
+    if invoice.chat_id is None:
+        logging.error("Invoice chat_id is None")
+        return
+
     auth_manager = await spotifyhelper.get_auth_manager(invoice.chat_id)
     if auth_manager is None:
         logging.error("No auth manager after succesfull payment")
@@ -656,9 +665,9 @@ async def callback_paid_invoice(invoice):
     await application.bot.send_message(
         chat_id=invoice.chat_id,
         parse_mode='HTML',
-        text=f"@{invoice.username} added {invoice.title} to the queue.")
+        text=f"@{invoice.user.username} added {invoice.title} to the queue.")
     await application.bot.send_message(
-        chat_id=invoice.userid,
+        chat_id=invoice.user.userid,
         parse_mode='HTML',
         text=f"You paid {invoice.amount_to_pay} sats for {invoice.title}.")
     
@@ -672,18 +681,18 @@ async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
     # check if the invoice has been paid
     cancel_invoice = context.job.data['cancel']
     payment_hash = context.job.data['payment_hash']
-    invoice = invoicehelper.get_invoice(payment_hash)
+    invoice = await invoicehelper.get_invoice(payment_hash)
 
     # cancel the invoice
     if cancel_invoice == True:
         if invoice is not None:
-            invoicehelper.delete_invoice(payment_hash)
+            await invoicehelper.delete_invoice(payment_hash)
             await context.bot.delete_message(invoice.chat_id,invoice.message_id)            
         return
 
     # check if invoice was paid
-    if invoicehelper.invoice_paid(invoice) == True:
-        callback_paid_invoice(invoice)
+    if await invoicehelper.invoice_paid(invoice) == True:
+        await callback_paid_invoice(invoice)
 
 async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
     # iterate over all auth managers
@@ -821,12 +830,19 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # TODO: maak setowner command om een user owner van de groep te maken. Die kan spotify koppelen
     recipient = await userhelper.get_group_owner(update.effective_chat.id)
     invoice = await invoicehelper.create_invoice(recipient, amount_to_pay, invoice_title)
-        
+
     # get the user wallet and try to pay the invoice
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
+    invoice.user = user
+    invoice.title = invoice_title
+    invoice.recipient = recipient    
+    invoice.spotify_uri_list = spotify_uri_list
+    invoice.title = invoice_title
+    invoice.chat_id = update.effective_chat.id
+    invoice.amount_to_pay = amount_to_pay
 
     # pay the invoice
-    payment_result = await invoicehelper.pay_invoice(user, invoice)
+    payment_result = await invoicehelper.pay_invoice(invoice.user, invoice)
 
     # if payment success
     if payment_result['result'] == True:
@@ -850,21 +866,16 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         text=f"@{update.effective_user.username} add '{invoice_title}' to the queue?\n\nThen pay the invoice of {amount_to_pay} sats.",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[        
-            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/payinvoice?payment_hash={invoice['payment_hash']}"),
+            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/payinvoice?payment_hash={invoice.payment_hash}"),
             InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))
         ]]))
 
 
     # add data to the invoice
-    invoice.recipient = recipient    
-    invoice.user = user
-    invoice.spotify_uri_list = spotify_uri_list
-    invoice.title = invoice_title
-    invoice.chat_id = update.effective_chat.id
     invoice.message_id = message.id
 
     # and save the invoice
-    invoicehelper.save_invoice(invoice)
+    await invoicehelper.save_invoice(invoice)
 
     # create a short timeout as fall back
     context.job_queue.run_once(check_invoice_callback, settings.delete_message_timeout_medium, data={'payment_hash':invoice.payment_hash,'cancel':False})
@@ -923,12 +934,11 @@ async def main() -> None:
     async def invoicepaid_callback(request: Request) -> Response:
         data = await request.json()
         payment_hash = data['payment_hash']
-
-                            
+                       
         invoice = await invoicehelper.get_invoice(payment_hash)
         if invoice is None:
-             Response("Not found, probably paid or incorrect payment hash")
-
+            return Response()
+        
         # process in the bot
         await callback_paid_invoice(invoice)
             
@@ -937,11 +947,26 @@ async def main() -> None:
     async def payinvoice_callback(request: Request) -> Response:
         payment_hash = request.query_params["payment_hash"]
 
-        invoice = invoicehelper.get_invoice(payment_hash)
+        invoice = await invoicehelper.get_invoice(payment_hash)
         if invoice is None:
             return Response("Invoice not found")
 
-        return Response(f"Pay the following invoice<br><pre>{invoice.payment_request}</pre>", media_type="text/html")
+        print(invoice.toJson())
+        return Response(f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+<h2>Add '{invoice.title}' to the queue?</h2>
+<a href="lightning:{invoice.payment_request}"><img src="https://lnbits.wholestack.nl/api/v1/qrcode/ligtning:{invoice.payment_request}"></a>
+<p style="word-break: break-all;">
+{invoice.payment_request}
+</p>
+</body>
+</html>
+""", media_type="text/html")
 
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """ 

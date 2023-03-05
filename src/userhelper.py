@@ -11,7 +11,7 @@ from time import time
 
 class User:
     def __init__(self, tguserid: int, tgusername:str = None) -> None:
-        self.userid = tguserid
+        self.userid = int(tguserid)
         self.username = tgusername
         self.rediskey = f"user:{self.userid}"
         self.invoicekey = None
@@ -38,7 +38,10 @@ class User:
         assert(data is not None)
         userdata = json.loads(data)
         assert(userdata is not None)
-        assert(userdata['telegram_userid'] == self.userid)
+        if (int(userdata['telegram_userid']) != self.userid):
+            logging.error(userdata['telegram_userid'])
+            logging.error(self.userid)
+            return
         
         if self.username is not None:
             assert(self.username == userdata['telegram_username'])
@@ -83,7 +86,7 @@ async def delete_group_owner(chat_id: int) -> None:
     data = settings.rds.hdel(f"group:{chat_id}","owner")
 
 async def get_balance(user:User) -> int:
-    return settings.lnbits.getBalance(user.invoicekey)
+    return await settings.lnbits.getBalance(user.invoicekey)
 
 
 async def set_group_owner(chat_id: int, userid: int) -> None:
