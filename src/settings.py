@@ -43,7 +43,7 @@ def init():
 
     # set secret token for telegram
     secret_token = "".join(random.sample(string.ascii_letters,12))
-    spotify_redirect_uri='https://bot.wholestack.nl/spotifycallback' # this must literaly match the config in spotify
+    spotify_redirect_uri='https://bot.wholestack.nl/jukebox/spotify' # this must literaly match the config in spotify
     
     # webserver port
     port = 7000
