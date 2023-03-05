@@ -86,12 +86,12 @@ async def get_balance(user:User) -> int:
     return settings.lnbits.getBalance(user.invoicekey)
 
 
-async def set_group_owner(chat_id: int, user: User) -> None:
+async def set_group_owner(chat_id: int, userid: int) -> None:
     data = settings.rds.hget(f"group:{chat_id}","owner")
     if data is not None:
-        userid = data.decode('utf-8')
-        assert(userid == user.userid)
-    data = settings.rds.hset(f"group:{chat_id}","owner",user.userid)
+        rds_userid = data.decode('utf-8')
+        assert(userid == rds_userid)
+    data = settings.rds.hset(f"group:{chat_id}","owner",userid)
 
 async def get_or_create_user(userid: int,username: str) -> User:
     """
