@@ -1,21 +1,25 @@
 def init():
     # when the help, start command is given
     global help
-    help = """You can use one of the following commands:
+    help = """
+You can use one of the following commands:
     
-    /start and /help both result in this output
-    /add to search for tracks. Searches can be refined using statements such as 'artist:'.
- /queue to view the list of upcoming tracks. 
- /history view the list of tracks that were played recently
- /dj <amount> to share some of your sats balance with another user. Use this command in a reply to them.
+/start and /help both result in this output
+/add to search for tracks. Searches can be refined using statements such as 'artist:'.
+/queue to view the list of upcoming tracks. 
+/history view the list of tracks that were played recently
+/dj <amount> to share some of your sats balance with another user. Use this command in a reply to them.
 
 You can also chat in private with me to do stuff like viewing your balance.
 
- /balance shows your balance.
- /fund can be used to add sats to your balance. While you can pay for each track, you can also add some sats in advance.
- /link provides an lndhub URL so that you can connect BlueWallet or Zeus to your wallet in the bot. That also makes it possible to withdraw/add funds.
+/balance shows your balance.
+/fund can be used to add sats to your balance. While you can pay for each track, you can also add some sats in advance.
+/link provides an lndhub URL so that you can connect BlueWallet or Zeus to your wallet in the bot. That also makes it possible to withdraw/add funds.
+/pay <lightning invoice> pays a lightning invoice.
 
-The NOSTR pubkey of NoderunnersFM is: npub1ua6fxn9ktc4jncanf79jzvklgjftcdrt5etverwzzg0lgpmg3hsq2gh6v6
+The /connect, /setclientid and /setclientsecret are commands to connect your own music player to this bot and start your own Jukebox!
+
+If you like this bot, send a donation to herovk@ln.tips or simply /dj the bot.
 """           
 
     # when someone executes the balance command in a group

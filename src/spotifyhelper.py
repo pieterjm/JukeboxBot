@@ -93,6 +93,8 @@ def get_track_title(item):
 
 
 async def create_auth_manager(chat_id, client_id, client_secret):
+    logging.info("create auth manager")
+    cache_handler = CacheJukeboxHandler(chat_id)
     return SpotifyOAuth(
         scope='user-read-currently-playing,user-modify-playback-state,user-read-playback-state',
         client_secret=client_secret,
@@ -100,12 +102,13 @@ async def create_auth_manager(chat_id, client_id, client_secret):
         redirect_uri=settings.spotify_redirect_uri,
         show_dialog=False,
         open_browser=False,        
-        cache_handler=CacheJukeboxHandler(chat_id))
+        cache_handler=cache_handler)
             
 async def init_auth_manager(chat_id, client_id, client_secret):
     """
     Initialize a spotify auth manager for a specific group
     """
+    logging.indo("init auth manager")
     data = {
         'chat_id': chat_id,
         'client_id': client_id,
@@ -120,11 +123,12 @@ async def get_auth_manager(chat_id):
     """
     Create a spotify auth manager for a specific group
     """
-    data = settings.rds.hget(f"group:{chat_id}","authmanager")
-    if data is None:
+    logging.info("Get Auth Manager")
+    am_data = settings.rds.hget(f"group:{chat_id}","authmanager")
+    if am_data is None:
         return None
-
-    data = json.loads(data)
+    
+    data = json.loads(am_data)
     return await create_auth_manager(data['chat_id'], data['client_id'], data['client_secret'])
 
 
@@ -136,8 +140,14 @@ async def delete_auth_manager(chat_id):
     data = settings.rds.hget(f"group:{chat_id}","authmanager")
     if data is None:
         return True
+
+    # delete the spotify token as well 
+    settings.rds.delete(f"spotify_token:{chat_id}")
     
     settings.rds.hdel(f"group:{chat_id}","authmanager")
+
+    # delete the spotify token as well 
+    settings.rds.delete(f"spotify_token:{chat_id}")
     return True
 
 
