@@ -964,6 +964,9 @@ async def main() -> None:
         return Response()
         
     async def payinvoice_callback(request: Request) -> Response:
+        if 'payment_hash' not in request.query_params:
+            return Response("Invoice not found")
+        
         payment_hash = request.query_params["payment_hash"]
 
         invoice = await invoicehelper.get_invoice(payment_hash)
