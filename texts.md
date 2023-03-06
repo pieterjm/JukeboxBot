@@ -1,7 +1,8 @@
 # Jukebox Lightning Bot texts
 
 |USER COMMANDS:|
-|/faq| view the help/info file that contains the commands and other tips/tricks to navigate the bot.|
+1. /faq
+    - view the help/info file that contains the commands and other tips/tricks to navigate the bot.|
 /add [track info] 
     # add music to the queue.
 /queue
