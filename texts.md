@@ -68,7 +68,8 @@ After you set the client id and secret, use the following in the group where you
 /couple to couple and enable the bot.
 /decouple to decouple and disable the bot.
 
-If you like this bot, send a donation to herovk@ln.tips and artdesignbysf@noderunners.org or simply /dj (amount) the bot.
+If you like this bot, send a donation to herovk@ln.tips and artdesignbysf@noderunners.org or simply /dj (amount) the bot. 
+
 Alternatively each user can consider donating a set amount to the bot maintainers when they add music to the queue. Use the following command to make it so:
 /donate (amount) (on) to specify the amount that will be added to the cost of adding a track to the que and which will be sent to the bot maintainers.
 /donate (off) to disable donating at each track addition.
