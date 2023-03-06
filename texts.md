@@ -13,27 +13,27 @@
     - Replace /balance with /stack to prevent command collisions with other bots.
 6. /fund 
     - Prefund ones personal jukebox stack, will open an LNRUL.
-7. /refund <invoice>
+7. /refund (invoice)
     - Initiate a withdrawel from ones personal jukebox stack to an invoice.
-8. /dj <amount>
+8. /dj (amount)
     - Use this in a reply to send someone sats for their jukebox stack.
-9.  /dj <@username> <amount>
+9.  /dj (@username) (amount)
     - Use this in a normal TG message to send sats to someones jukebox stack.
-10. /dj <invoice>
-    - Same as /refund <invoice>, users can send sats from their stack to an invoice.
+10. /dj (invoice)
+    - Same as /refund (invoice), users can send sats from their stack to an invoice.
 11. /link
     - View LNDHUB-QR code so users can link their jukebox stack LNBits wallet to their own lightning wallet.
 
 ## Admin commands:
-1. /setclientid <player client id>
+1. /setclientid (player client id)
     - Sets the audioplayer client id. 
-2. /setclientsecret <player client secret>
+2. /setclientsecret (player client secret)
     - Sets the audioplayer client secret.
 3. /couple 
-    - Replace /connect with /coule to preveent command colissions with other bots. 
+    - Replace /connect with /couple to prevent command colissions with other bots. 
     - Admins use this command to couple their player to their Telegram group.
 4. /decouple 
-    - Replace /disconnect with /decouple to preveent command colissions with other bots. 
+    - Replace /disconnect with /decouple to preveet command colissions with other bots. 
     - Admins use this command to decouple their player to their Telegram group.
 
 ## Jukeboxtexts.py edit suggestions
@@ -46,14 +46,14 @@ Use these commands to control the Jukebox:
 
 User commands:
 /faq to show this cheatsheet.
-/add <track info> to search for music. Replace <track info> with the artist and track title.
+/add (track info) to search for music. Replace (track info) with the artist and track title.
 /queue to view the list of upcoming tracks. 
 /history speaks for itself.
 /fund to prefund your personal jukebox stack via a LNURL.
-/refund [invoice] to initiate a withdrawel from your jukebox stack
-/dj [amount] use this in a reply to send someone sats for their jukebox stack.
-/dj [@username] [amount] use this in a normal message to send sats to someones jukebox stack.
-/dj [invoice] same as /refund [invoice] to send sats from your jukebox stack to an invoice.
+/refund (invoice) to initiate a withdrawel from your jukebox stack
+/dj (amount) use this in a reply to send someone sats for their jukebox stack.
+/dj (@username) (amount) use this in a normal message to send sats to someones jukebox stack.
+/dj (invoice) does the same as /refund (invoice) and will send sats from your jukebox stack to an invoice.
     
 The following will only show results in a private chat between you and the bot:
 /stack to view the balance of your jukebox stack.
@@ -61,8 +61,8 @@ The following will only show results in a private chat between you and the bot:
 
 ## Admin commands:
 These will must be done in a private chat between you and the bot:
-/setclientid /setclientid <Spotify client id> sets the spotify client id. 
-/setclientsecret <Spotify client secret> sets the spotify client secret.
+/setclientid /setclientid (Spotify client id) sets the spotify client id. 
+/setclientsecret (Spotify client secret) sets the spotify client secret.
 
 After you set the client id and secret, use the following in the group where you wish to enable the bot:
 /couple to couple and enable the bot.
@@ -70,8 +70,8 @@ After you set the client id and secret, use the following in the group where you
 
 If you like this bot, send a donation to herovk@ln.tips and artdesignbysf@noderunners.org or simply /dj the bot.
 Alternatively each user can consider donating a set amount to the bot maintainers when they add music to the queue. Use the following command to make it so:
-/donate <amount> <on> to specify the amount that will be added to the cost of adding a track to the que and which will be sent to the bot maintainers.
-/donate <off> to disable donating at each track addition.
+/donate (amount) (on) to specify the amount that will be added to the cost of adding a track to the que and which will be sent to the bot maintainers.
+/donate (off) to disable donating at each track addition.
 """           
 
     # when someone executes the stack command in a group
@@ -118,4 +118,4 @@ Alternatively each user can consider donating a set amount to the bot maintainer
     click_the_button_to_authorize = "Clicking this button will take you to Spotify where you must grant the bot the authorisation to control the player."
 
     global add_command_help
-    add_command_help = "Use the /add <track info> command to search for music and add them to the playlist. Replace <track info> with the name of the artist and the title of the music. Please beware, some music may not be listed. If at first you don't find what you are looking for, cancel and try again. Here is an example: /add Pink Floyd Money
+    add_command_help = "Type /faq for more info. Use the /add (track info) command to search for music and add them to the playlist. Replace (track info) with the name of the artist and the title of the music. Please beware, some music may not be listed. If at first you don't find what you are looking for, cancel and try again. Here is an example: /add Pink Floyd Money
