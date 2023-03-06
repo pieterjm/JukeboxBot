@@ -24,6 +24,7 @@
 11. /link
     - View LNDHUB-QR code so users can link their jukebox stack LNBits wallet to their own lightning wallet.
 
+
 ## Admin commands:
 1. /setclientid (player client id)
     - Sets the audioplayer client id. 
@@ -35,7 +36,11 @@
 4. /decouple 
     - Replace /disconnect with /decouple to preveet command colissions with other bots. 
     - Admins use this command to decouple their player to their Telegram group.
-
+5. /setdonate <on>
+    - Donates 7 sats of the 21 to the botmainers at each jukebox /add 
+6. /setdonate <off>
+    - Disables the donation
+    
 ## Jukeboxtexts.py edit suggestions
 
 def init():
