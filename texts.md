@@ -1,7 +1,6 @@
 # Jukebox Lightning Bot texts
 
 USER COMMANDS:
-<details>
 /faq
     # view the help/info file that contains the commands and other tips/tricks to navigate the bot.
 /add [track info] 
@@ -24,10 +23,8 @@ USER COMMANDS:
     # Same as /refund [invoice], users can send sats from their stack to an invoice.
 /link
     # view LNDHUB-QR code so users can link their jukebox stack LNBits wallet to their own lightning wallet.
-</details>
 
 ADMIN COMMANDS:
-<details>
 /setclientid
     # sets the spotify client id. 
 /setclientsecret
@@ -38,5 +35,3 @@ ADMIN COMMANDS:
 /decouple 
     # replace /disconnect with /decouple to preveent command colissions with other bots. 
     #Admins use this command to decouple their spotify player to their Telegram group.
-</details>
-
