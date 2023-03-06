@@ -36,9 +36,9 @@
 4. /decouple 
     - Replace /disconnect with /decouple to preveet command colissions with other bots. 
     - Admins use this command to decouple their player to their Telegram group.
-5. /setdonate <on>
+5. /setdonate (on)
     - Donates 7 sats of the 21 to the botmainers at each jukebox /add 
-6. /setdonate <off>
+6. /setdonate (off)
     - Disables the donation
     
 ## Jukeboxtexts.py edit suggestions
