@@ -1,16 +1,16 @@
 # Jukebox Lightning Bot texts
 
-|USER COMMANDS:|
-1. /faq
+USER COMMANDS:
+1.  /faq
     - view the help/info file that contains the commands and other tips/tricks to navigate the bot.|
-/add [track info] 
-    # add music to the queue.
-/queue
-    # view the queue.
-/history
-    # view the history.
-/stack 
-    # replace /balance with /stack to prevent command collisions with other bots.
+2.  /add [track info] 
+    - add music to the queue.
+3. /queue
+    - view the queue.
+4. /history
+    - view the history.
+5. /stack 
+    - replace /balance with /stack to prevent command collisions with other bots.
 /fund 
     # command to prefund ones personal jukebox stack, will open an LNRUL.
 /refund [invoice] 
