@@ -3,7 +3,7 @@
 ## User commands:
 1.  /faq
     - View the bot FAQ that contains the commands and other tips & tricks to navigate the bot.
-2.  /add <track info>
+2.  /add (track info)
     - Add music to the queue.
 3. /queue
     - View the queue.
