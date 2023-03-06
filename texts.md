@@ -72,8 +72,7 @@ If you like this bot, send a donation to herovk@ln.tips and artdesignbysf@noderu
 
 Alternatively each user can consider donating a set amount to the bot maintainers when they add music to the queue. Use the following command to make it so:
 /donate (amount) (on) to specify the amount that will be added to the cost of adding a track to the que and which will be sent to the bot maintainers.
-/donate (off) to disable donating at each track addition.
-"""           
+/donate (off) to disable donating at each track addition.           
 
     # when someone executes the stack command in a group
     global balance_in_group
