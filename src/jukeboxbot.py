@@ -230,7 +230,7 @@ To connect this bot to your spotify account, you have to create an app in the de
 
 4. Use the /setclientid and /setclientsecret commands to configure the 'Client ID' and 'Client Secret'. 
 
-5. Give the '/connect' command in the group that you want to connect to your account. That will redirect you to an authorisation page.
+5. Give the '/couple' command in the group that you want to connect to your account. That will redirect you to an authorisation page.
  
 """)
         
@@ -273,7 +273,7 @@ To connect this bot to your spotify account, you have to create an app in the de
         if auth_manager is not None:
             message = await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="A player is already connected to this group chat. disconnect it first using the /disconnect command before connecting a new one")
+                text="A player is already connected to this group chat. disconnect it first using the /decouple command before connecting a new one")
             context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})
             return
             
@@ -322,7 +322,7 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
-            text="Bot not connected to player. The admin should perform the /connect command to authorize the bot.")
+            text="Bot not connected to player. The admin should perform the /couple command to authorize the bot.")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
         return
 
@@ -396,7 +396,7 @@ async def spotify_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await spotifyhelper.save_spotify_settings(sps)
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=f"Settings updated. Type /connect for current settings and instructions.")
+            text=f"Settings updated. Type /couple for current settings and instructions.")
 
 
 # fund the wallet of the user
@@ -424,7 +424,7 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
-            text="Bot not connected to player. The admin should perform the /connect command to authorize the bot.")
+            text="Bot not connected to player. The admin should perform the /couple command to authorize the bot.")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
         return
 
@@ -478,7 +478,7 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # pay a lightning invoice
 @debounce
 async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    result = re.search("/pay\s+(lnbc[a-z0-9]+)\s*$",update.message.text)
+    result = re.search("/refund\s+(lnbc[a-z0-9]+)\s*$",update.message.text)
     if result is None:
         await context.bot.send_message(
             chat_id=update.effective_user.id,
@@ -524,7 +524,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
-            text="Bot not connected to player. The admin should perform the /connect command to authorize the bot.")
+            text="Bot not connected to player. The admin should perform the /couple command to authorize the bot.")
         return
 
     # create spotify instance
@@ -787,7 +787,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
-            text="Bot not connected to player. The admin should perform the /connect command to authorize the bot.")
+            text="Bot not connected to player. The admin should perform the /couple command to authorize the bot.")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
         return
 
@@ -919,17 +919,17 @@ async def main() -> None:
 
     # register handlers
     application.add_handler(CommandHandler('add', search))  # search for a track
-    application.add_handler(CommandHandler('balance', balance)) # view wallet balance
-    application.add_handler(CommandHandler('connect', connect)) # connect to spotify account
-    application.add_handler(CommandHandler('disconnect', disconnect)) # disconnect from spotify account
+    application.add_handler(CommandHandler(['stack','balance'], balance)) # view wallet balance
+    application.add_handler(CommandHandler('couple', connect)) # connect to spotify account
+    application.add_handler(CommandHandler('decouple', disconnect)) # disconnect from spotify account
     application.add_handler(CommandHandler('fund',fund)) # add funds to wallet
     application.add_handler(CommandHandler('history', history)) # view history of tracks
     application.add_handler(CommandHandler('link',link)) # view LNDHUB QR 
-    application.add_handler(CommandHandler('pay', pay)) # pay a lightning invoice
+    application.add_handler(CommandHandler('refund', pay)) # pay a lightning invoice
     application.add_handler(CommandHandler('queue', queue)) # view the queue
     application.add_handler(CommandHandler("setclientsecret",spotify_settings)) # set the secret for a spotify app
     application.add_handler(CommandHandler("setclientid",spotify_settings))  # set the clientid or a spotify app
-    application.add_handler(CommandHandler(["start","help"],start))  # help message
+    application.add_handler(CommandHandler(["start","faq"],start))  # help message
     application.add_handler(CommandHandler('dj', dj))  # pay another user    
 
     application.add_handler(CallbackQueryHandler(callback_button))
@@ -1053,7 +1053,7 @@ async def main() -> None:
                 await userhelper.set_group_owner(chatid, userid)
                 await application.bot.send_message(
                     chat_id=userid,
-                    text=f"Spotify connected to the '{chatname}' chat. All revenues of requested tracks are coming your way. Execute the /disconnect command in the group to remove the authorisation.")
+                    text=f"Spotify connected to the '{chatname}' chat. All revenues of requested tracks are coming your way. Execute the /decouple command in the group to remove the authorisation.")
         except Exception as e:            
             logging.error(e)
             logging.error("Failure during auth_manager instantiation")
@@ -1078,7 +1078,7 @@ async def main() -> None:
             amount = int(obj['amount'] / 1000)            
             await application.bot.send_message(
                 chat_id=int(tguserid),
-                text=f"Received {amount} sats.Type /balance to view your balance.")
+                text=f"Received {amount} sats. Type /stack to view your sats stack.")
         return Response()
 
     starlette_app = Starlette(

@@ -4,7 +4,7 @@ def init():
     help = """
 You can use one of the following commands:
     
-/start and /help both result in this output
+/start and /faq both result in this output
 /add to search for tracks. Searches can be refined using statements such as 'artist:'.
 /queue to view the list of upcoming tracks. 
 /history view the list of tracks that were played recently
@@ -12,12 +12,12 @@ You can use one of the following commands:
 
 You can also chat in private with me to do stuff like viewing your balance.
 
-/balance shows your balance.
+/stack shows your balance.
 /fund can be used to add sats to your balance. While you can pay for each track, you can also add some sats in advance.
 /link provides an lndhub URL so that you can connect BlueWallet or Zeus to your wallet in the bot. That also makes it possible to withdraw/add funds.
-/pay <lightning invoice> pays a lightning invoice.
+/refund <lightning invoice> pays a lightning invoice so you can get your sats back.
 
-The /connect, /setclientid and /setclientsecret are commands to connect your own music player to this bot and start your own Jukebox!
+The /couple, /decouple, /setclientid and /setclientsecret are commands to connect your own music player to this bot and start your own Jukebox!
 
 If you like this bot, send a donation to herovk@ln.tips or simply /dj the bot.
 """           
@@ -28,7 +28,7 @@ If you like this bot, send a donation to herovk@ln.tips or simply /dj the bot.
 
     # when someone executes the disconnect command in a private chat
     global disconnect_in_private_chat
-    disconnect_in_private_chat = "Execute the /disconnect command in a group where you want the player disconnected"
+    disconnect_in_private_chat = "Execute the /decouple command in a group where you want the player disconnected"
 
     # when someone tries to perform a command that requires admin permissions
     global you_are_not_admin
@@ -36,7 +36,7 @@ If you like this bot, send a donation to herovk@ln.tips or simply /dj the bot.
 
     # when the spotify authorisation is removed
     global spotify_authorisation_removed
-    spotify_authorisation_removed = "Removed player from group. To reconnect, an admin should perform the /connect command to authorize the bot."
+    spotify_authorisation_removed = "Removed player from group. To reconnect, an admin should perform the /couple command to authorize the bot."
 
     global spotify_authorisation_removed_error
     spotify_authorisation_removed_error = "Removed player from group failed. Sorry. retry or dm the captain."
@@ -54,7 +54,7 @@ If you like this bot, send a donation to herovk@ln.tips or simply /dj the bot.
     client_secret_set = "Spotify Client Secret is set"
 
     global everything_set_now_do_connect
-    everything_set_now_do_connect = "Both client_id and client_secret are set. Execute the /connect command in the group that you want to connect to the bot"
+    everything_set_now_do_connect = "Both client_id and client_secret are set. Execute the /couple command in the group that you want to connect to the bot"
 
     global instructions_in_private_chat
     instructions_in_private_chat = "I'm sending instructions in the private chat."
