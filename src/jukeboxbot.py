@@ -920,6 +920,8 @@ async def main() -> None:
     )
     # save the values in `bot_data` such that we may easily access them in the callbacks
     application.bot_data["url"] = settings.bot_url
+    application.bot.local_mode = True
+    application.bot.base_url = 'http://127.0.0.1:8081/bot'    
 
     # register handlers
     application.add_handler(CommandHandler('add', search))  # search for a track
@@ -941,7 +943,8 @@ async def main() -> None:
 
     # Pass webhook settings to telegram
     print(await application.bot.set_webhook(
-        url=f"https://bot.wholestack.nl/jukebox/telegram",
+        url="http://127.0.0.1:7000/jukebox/telegram",
+#        url=f"https://bot.wholestack.nl/jukebox/telegram",
         allowed_updates=['callback_query','message']
     ))
 
