@@ -1,7 +1,7 @@
 # JukeboxBot
 A Bitcoin lightning enabled Jukebox for Telegram
 
-![](assets/JukeboxBot.jpg)
+![](assets/20230307-Bot-logo-new.jpg)
 
 ## General info
  - The name of the bot is '@Jukebox_Lightning_bot'
