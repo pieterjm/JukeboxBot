@@ -1086,7 +1086,7 @@ async def main() -> None:
 
     starlette_app = Starlette(
         routes=[
-            Route(f"/jukebox/{settings.secret_token}", telegram, methods=["POST"]),
+            Route(f"/jukebox/{settings.secret_token}", telegram, methods=["GET","POST"]),
             Route("/jukebox/lnbitscallback", lnbits_lnurlp_callback, methods=["POST"]),
             Route("/jukebox/spotify", spotify_callback, methods=["GET"]),
             Route("/jukebox/payinvoice",payinvoice_callback, methods=["GET"]),
