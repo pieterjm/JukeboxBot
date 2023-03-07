@@ -93,18 +93,18 @@ async def pay_invoice(user: User, invoice: Invoice):
 async def save_invoice(invoice: Invoice) -> None:
     settings.rds.set(invoice.rediskey,invoice.toJson())
             
-async def delete_invoice(invoice: Invoice) -> bool:
-    data = settings.rds.get(invoice.rediskey)
-    if data is None:
-        return True
-    
-    settings.rds.delete(invoice.rediskey)
+async def delete_invoice(payment_hash: str) -> bool:
+    if payment_hash is None:
+        logging.error("Delete invoice called with None payment_hash")
+        return False
+    rediskey = f"invoice:{payment_hash}"
+    settings.rds.delete(rediskey)
     return True
     
 async def invoice_paid(invoice: Invoice) -> bool:
     result = await settings.lnbits.checkInvoice(invoice.recipient.invoicekey,invoice.payment_hash)
     if result == True:
-        await delete_invoice(invoice)
+        await delete_invoice(invoice.payment_hash)
         return True
     else:
         return False
