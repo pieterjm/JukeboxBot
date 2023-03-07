@@ -698,6 +698,9 @@ async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
     cancel_invoice = context.job.data['cancel']
     payment_hash = context.job.data['payment_hash']
     invoice = await invoicehelper.get_invoice(payment_hash)
+    if invoice is None:
+        logging.info("No invoice in check_invoice_callback")
+        return
 
     # cancel the invoice
     if cancel_invoice == True:
@@ -707,6 +710,7 @@ async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
         return
 
     # check if invoice was paid
+    logging.info(invoice)
     if await invoicehelper.invoice_paid(invoice) == True:
         await callback_paid_invoice(invoice)
 
