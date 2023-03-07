@@ -718,8 +718,13 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
         if auth_manager is None:
             continue
 
-        sp = spotipy.Spotify(auth_manager=auth_manager)
-        currenttrack = sp.current_user_playing_track()
+        currenttrack = None
+        try:
+            sp = spotipy.Spotify(auth_manager=auth_manager)
+            currenttrack = sp.current_user_playing_track()
+        except:
+            logging.error("Exception while querying the current playing track at spotify")
+            return
 
         title = "Nothing playing at the moment"
         if currenttrack:
@@ -940,12 +945,12 @@ async def main() -> None:
     # Set up webserver
     async def telegram(request: Request) -> Response:
         """Handle incoming Telegram updates by putting them into the `update_queue`"""
-        if 'X-Telegram-Bot-Api-Secret-Token' in request.headers:
-            if request.headers['X-Telegram-Bot-Api-Secret-Token'] == settings.secret_token:        
-                await application.update_queue.put(
-                    Update.de_json(data=await request.json(), bot=application.bot)
-                )
-        return Response()
+        try:
+            await application.update_queue.put(
+                Update.de_json(data=await request.json(), bot=application.bot)
+            )
+        finally:
+            return Response()
 
     async def invoicepaid_callback(request: Request) -> Response:
         data = await request.json()
