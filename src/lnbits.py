@@ -1,5 +1,6 @@
 import json
 import httpx
+import logging
 
 class LNbits:
     def __init__(self, protocol, host, admin_adminkey, admin_invoicekey, admin_usrkey):
