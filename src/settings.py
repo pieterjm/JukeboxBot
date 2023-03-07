@@ -23,6 +23,7 @@ def init():
     global secret_token
     global qrcode_path
     global port
+    global max_connections
 
     
     # set the new environment and fall back to development
@@ -45,7 +46,8 @@ def init():
     # set secret token for telegram
     secret_token = "".join(random.sample(string.ascii_letters,12))
     spotify_redirect_uri='https://bot.wholestack.nl/jukebox/spotify' # this must literaly match the config in spotify
-    
+    max_connections = 5
+
     # webserver port
     port = 7000
     

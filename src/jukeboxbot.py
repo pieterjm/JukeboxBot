@@ -708,8 +708,8 @@ async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
             await invoicehelper.delete_invoice(payment_hash)
             await context.bot.delete_message(invoice.chat_id,invoice.message_id)            
         return
-
-    # check if invoice was paid
+    
+    # check if invoice was paid    
     logging.info(invoice)
     if await invoicehelper.invoice_paid(invoice) == True:
         await callback_paid_invoice(invoice)
@@ -940,11 +940,12 @@ async def main() -> None:
     application.job_queue.run_repeating(callback_spotify, 10)
 
     # Pass webhook settings to telegram
-    print(await application.bot.set_webhook(
+    await application.bot.set_webhook(
         url="http://127.0.0.1:7000/jukebox/telegram",
+        max_connections=settings.max_connections,
 #        url=f"https://bot.wholestack.nl/jukebox/telegram",
         allowed_updates=['callback_query','message']
-    ))
+    )
 
     # Set up webserver
     async def telegram(request: Request) -> Response:
@@ -1064,6 +1065,19 @@ async def main() -> None:
             return Response()
 
         return Response("Authorisation succesfull. You can close this window now")
+    
+    async def restart_bot(request: Request) -> Response:
+        try:
+            await application.bot.delete_webhook()
+            await asyncio.sleep(10)
+            await application.bot.set_webhook(
+                url="http://127.0.0.1:7000/jukebox/telegram",
+                max_connections=settings.max_connections,
+                allowed_updates=['callback_query','message']
+            )
+        except:
+            return Response("Something went wrong while resetting the bot")        
+        return Response("Should be reset by now")
 
     async def lnbits_lnurlp_callback(request: Request) -> PlainTextResponse:
         """
@@ -1092,7 +1106,9 @@ async def main() -> None:
             Route("/jukebox/spotify", spotify_callback, methods=["GET"]),
             Route("/jukebox/payinvoice",payinvoice_callback, methods=["GET"]),
             Route("/jukebox/invoicecallback",invoicepaid_callback, methods=["POST"]),
-            Route("/jukebox/status.json",jukebox_status, methods=["GET"])
+            Route("/jukebox/status.json",jukebox_status, methods=["GET"]),
+            Route("/jukebox/restart6249016860",restart_bot, methods=["GET"])
+
         ]
     )
 
