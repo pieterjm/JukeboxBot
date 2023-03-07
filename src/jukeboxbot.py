@@ -941,7 +941,7 @@ async def main() -> None:
 
     # Pass webhook settings to telegram
     print(await application.bot.set_webhook(
-        url=f"https://bot.wholestack.nl/jukebox/{settings.secret_token}",
+        url=f"https://bot.wholestack.nl/jukebox/telegram",
         allowed_updates=['callback_query','message']
     ))
 
@@ -1086,7 +1086,7 @@ async def main() -> None:
 
     starlette_app = Starlette(
         routes=[
-            Route(f"/jukebox/{settings.secret_token}", telegram, methods=["GET","POST"]),
+            Route(f"/jukebox/telegram", telegram, methods=["GET","POST"]),
             Route("/jukebox/lnbitscallback", lnbits_lnurlp_callback, methods=["POST"]),
             Route("/jukebox/spotify", spotify_callback, methods=["GET"]),
             Route("/jukebox/payinvoice",payinvoice_callback, methods=["GET"]),
