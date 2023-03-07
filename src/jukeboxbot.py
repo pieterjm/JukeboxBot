@@ -916,12 +916,10 @@ async def main() -> None:
     # Here we set updater to None because we want our custom webhook server to handle the updates
     # and hence we don't need an Updater instance
     application = (
-        Application.builder().token(settings.bot_token).updater(None).build()
+        Application.builder().token(settings.bot_token).local_mode(True).base_url('http://127.0.0.1:8081/bot').updater(None).build()
     )
     # save the values in `bot_data` such that we may easily access them in the callbacks
     application.bot_data["url"] = settings.bot_url
-    application.bot.local_mode = True
-    application.bot.base_url = 'http://127.0.0.1:8081/bot'    
 
     # register handlers
     application.add_handler(CommandHandler('add', search))  # search for a track
