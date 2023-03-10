@@ -918,9 +918,7 @@ async def main() -> None:
     application = (
         Application.builder().token(settings.bot_token).updater(None).build()
     )
-    # save the values in `bot_data` such that we may easily access them in the callbacks
-    application.bot_data["url"] = settings.bot_url
-
+ 
     # register handlers
     application.add_handler(CommandHandler('add', search))  # search for a track
     application.add_handler(CommandHandler(['stack','balance'], balance)) # view wallet balance
