@@ -981,21 +981,29 @@ async def main() -> None:
         print(invoice.toJson())
         return Response(f"""
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8">
+  <title>Pay invoice to add '{invoice.title}' to queue</title>
+  <link rel="stylesheet" href="/jukebox/assets/JukeboxBot.css">
 </head>
 <body>
-<h2>Add '{invoice.title}' to the queue?</h2>
-<a href="lightning:{invoice.payment_request}"><img src="https://{settings.domain}/api/v1/qrcode/{invoice.payment_request}"></a>
-<p style="word-break: break-all;">
-{invoice.payment_request}
-</p>
+  <div class="container">
+    <div class="image-container">
+      <div class="image-content">
+        <img src="/jukebox/assets/jukeboxbot_payinvoice.png" alt="JukeboxBot" />
+        <div class="qr-code-container">
+          <a href="lightning:{invoice.payment_request}"><img id="qr-code-image" alt="QR code image" invoice="{invoice.payment_request}"></a>
+        </div>
+        <button class="copy-invoice" aria-label="Copy invoice"></button>
+      </div>
+    </div>
+  </div>
+  <script src="/jukebox/assets/JukeboxBot.js"></script>
 </body>
 </html>
-""", media_type="text/html")
+"""
     
-
     async def jukebox_status(request: Request) -> PlainTextResponse:
         if 'chat_id' not in request.query_params:
             return Response({})
