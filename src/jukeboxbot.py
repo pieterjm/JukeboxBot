@@ -708,8 +708,8 @@ async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
             await invoicehelper.delete_invoice(payment_hash)
             await context.bot.delete_message(invoice.chat_id,invoice.message_id)            
         return
-
-    # check if invoice was paid
+    
+    # check if invoice was paid    
     logging.info(invoice)
     if await invoicehelper.invoice_paid(invoice) == True:
         await callback_paid_invoice(invoice)
@@ -941,9 +941,9 @@ async def main() -> None:
 
     # Pass webhook settings to telegram
     print(await application.bot.set_webhook(
-#        url="http://127.0.0.1:7000/jukebox/telegram",
         url=f"https://bot.wholestack.nl/jukebox/telegram",
         allowed_updates=['callback_query','message'],
+#        max_connections=settings.max_connections,
 	ip_address="159.89.7.158"
     ))
 
@@ -1065,7 +1065,7 @@ async def main() -> None:
             return Response()
 
         return Response("Authorisation succesfull. You can close this window now")
-
+    
     async def lnbits_lnurlp_callback(request: Request) -> PlainTextResponse:
         """
         Callback from LNbits when a wallet is funded. Send a message to the telegram user
