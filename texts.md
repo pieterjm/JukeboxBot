@@ -50,9 +50,9 @@ refund - Withdraw sats from your personal wallet
 4. /decouple 
     - Replace /disconnect with /decouple to preveet command colissions with other bots. 
     - Admins use this command to decouple their player to their Telegram group.
-5. /setdonate (on)
-    - Donates 7 sats of the 21 to the botmainers at each jukebox /add 
-6. /setdonate (off)
+5. /setgift (on)
+    - Gifts 7 of the 21 sats to the botmainers at each jukebox /add 
+6. /setgift (off)
     - Disables the donation
     
 ## Jukeboxtexts.py edit suggestions
@@ -90,8 +90,8 @@ After you set the client id and secret, use the following in the group where you
 If you like this bot, send a donation to herovk@ln.tips and artdesignbysf@noderunners.org or simply /dj (amount) the bot. 
 
 Alternatively each user can consider donating a set amount to the bot maintainers when they add music to the queue. Use the following command to make it so:
-/donate (amount) (on) to specify the amount that will be added to the cost of adding a track to the que and which will be sent to the bot maintainers.
-/donate (off) to disable donating at each track addition.           
+/gift (amount) (on) to specify the amount that will be added to the cost of adding a track to the que and which will be sent to the bot maintainers.
+/gift (off) to disable donating at each track addition.           
 
     # when someone executes the stack command in a group
     global balance_in_group
