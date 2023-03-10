@@ -1075,7 +1075,24 @@ async def main() -> None:
             logging.error("Failure during auth_manager instantiation")
             return Response()
 
-        return Response("Authorisation succesfull. You can close this window now")
+        return Response("""    
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Authorisation succesfull!</title>
+  <link rel="stylesheet" href="/jukebox/assets/JukeboxBot.css">
+</head>
+<body>
+  <div class="container">
+    <div class="image-container">
+      <div class="image-content">
+        <img src="/jukebox/assets/auth_success.png" alt="JukeboxBot" />
+    </div>
+  </div>
+</body>
+</html>    
+""") 
     
     async def lnbits_lnurlp_callback(request: Request) -> PlainTextResponse:
         """
