@@ -226,7 +226,7 @@ To connect this bot to your spotify account, you have to create an app in the de
 
 2. Record the 'Client ID' and 'Client Secret'. 
 
-3. Click 'Edit Settings' and add EXACTLY this url <pre>https://bot.wholestack.nl/jukebox/spotify</pre> under 'Redirect URIs'. Do not forget to click 'Add' and 'Save'
+3. Click 'Edit Settings' and add EXACTLY this url <pre>https://jukebox.lightning/spotify</pre> under 'Redirect URIs'. Do not forget to click 'Add' and 'Save'
 
 4. Use the /setclientid and /setclientsecret commands to configure the 'Client ID' and 'Client Secret'. 
 
@@ -891,7 +891,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         text=f"@{update.effective_user.username} add '{invoice_title}' to the queue?\n\nClick to pay below or fund the bot with /fund@Jukebox_Lightning_bot.",       
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[        
-            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://bot.wholestack.nl/jukebox/payinvoice?payment_hash={invoice.payment_hash}"),
+            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://jukebox.lightning/jukebox/payinvoice?payment_hash={invoice.payment_hash}"),
             InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))
         ]]))
 
@@ -941,10 +941,10 @@ async def main() -> None:
 
     # Pass webhook settings to telegram
     print(await application.bot.set_webhook(
-        url=f"https://bot.wholestack.nl/jukebox/telegram",
+        url=f"https://bot.jukebox.lightning/jukebox/telegram",
         allowed_updates=['callback_query','message'],
 #        max_connections=settings.max_connections,
-	ip_address="159.89.7.158"
+	    ip_address="159.89.7.158"
     ))
 
     # Set up webserver
@@ -989,7 +989,7 @@ async def main() -> None:
 </head>
 <body>
 <h2>Add '{invoice.title}' to the queue?</h2>
-<a href="lightning:{invoice.payment_request}"><img src="https://bot.wholestack.nl/api/v1/qrcode/{invoice.payment_request}"></a>
+<a href="lightning:{invoice.payment_request}"><img src="https://jukebox.lightning/api/v1/qrcode/{invoice.payment_request}"></a>
 <p style="word-break: break-all;">
 {invoice.payment_request}
 </p>
@@ -1026,7 +1026,7 @@ async def main() -> None:
 
         A typical request will like like the following
 
-        GET /jukebox/spotify?code=AQB5sDUcKql9oULl10ftgo9Lhmyzr3lpMRQl7i65drdM4WGaWvfx9ANBcUXVg-yR1FAqS2_yINbf6ej41lNr9ghmBGik0Bjwcgf90yxYLgk_H5c_ZcV2AKz9-eiqsnjZxqVoJyWqc5LnRHn0aEGG8YwBsk5ZHKIQh82uHikDZyAxKSCdLGCIaPbQtNUR0ej8WZH1y_gg_YOJa5aoC-f4ODJYOrokOTolxnlEy3zaJvddOgCF_GC8Fd9upxmovV5JR8LfACvrurjGYW7MaGeDKWMCb29GNXtg3lovTh2rwzE HTTP/1.0
+        GET /spotify?code=AQB5sDUcKql9oULl10ftgo9Lhmyzr3lpMRQl7i65drdM4WGaWvfx9ANBcUXVg-yR1FAqS2_yINbf6ej41lNr9ghmBGik0Bjwcgf90yxYLgk_H5c_ZcV2AKz9-eiqsnjZxqVoJyWqc5LnRHn0aEGG8YwBsk5ZHKIQh82uHikDZyAxKSCdLGCIaPbQtNUR0ej8WZH1y_gg_YOJa5aoC-f4ODJYOrokOTolxnlEy3zaJvddOgCF_GC8Fd9upxmovV5JR8LfACvrurjGYW7MaGeDKWMCb29GNXtg3lovTh2rwzE HTTP/1.0
         """
 
         logging.info("Got callback from spotify")
@@ -1090,7 +1090,7 @@ async def main() -> None:
         routes=[
             Route(f"/jukebox/telegram", telegram, methods=["GET","POST"]),
             Route("/jukebox/lnbitscallback", lnbits_lnurlp_callback, methods=["POST"]),
-            Route("/jukebox/spotify", spotify_callback, methods=["GET"]),
+            Route("/spotify", spotify_callback, methods=["GET"]),
             Route("/jukebox/payinvoice",payinvoice_callback, methods=["GET"]),
             Route("/jukebox/invoicecallback",invoicepaid_callback, methods=["POST"]),
             Route("/jukebox/status.json",jukebox_status, methods=["GET"])

@@ -45,7 +45,7 @@ def init():
 
     # set secret token for telegram
     secret_token = "".join(random.sample(string.ascii_letters,12))
-    spotify_redirect_uri='https://bot.wholestack.nl/jukebox/spotify' # this must literaly match the config in spotify
+    spotify_redirect_uri='https://jukebox.lightning/spotify' # this must literaly match the config in spotify
     max_connections = 5
 
     # webserver port
@@ -55,14 +55,14 @@ def init():
     fund_max = 100 * price
     fund_min = price
     rds = redis.Redis(db=2)
-    lnbits_public_host='bot.wholestack.nl'
+    lnbits_public_host='jukebox.lightning'
     lnbits = LNbits(
         os.environ['LNBITS_PROTOCOL'],
         os.environ['LNBITS_HOST'],
         os.environ['LNBITS_ADMINKEY'],
         os.environ['LNBITS_INVOICEKEY'],
         os.environ['LNBITS_USRKEY'])
-    bot_url="https://bot.wholestack.nl/"        
+    bot_url="https://jukebox.lightning/"        
     bot_token=os.environ['BOT_TOKEN']
     qrcode_path = '/tmp'
 

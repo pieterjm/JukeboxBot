@@ -8,7 +8,6 @@ A Bitcoin lightning enabled Jukebox for Telegram
  - The handle of the bot is "jukebox_fm_bot'
  - Jitsi link: https://meet.jit.si/NoderunnersFMRadioRocks24HoursADay
 
-
 ## Backlog
  - Spotify gave a new error when connecting, test invalid ID's
  - Create nicely designed HTML pages for payment and Spotify connection
