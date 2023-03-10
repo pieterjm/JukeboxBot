@@ -49,6 +49,10 @@ class User:
         self.adminkey = userdata['adminkey']
         self.walletid = userdata['walletid']
         self.lnurlp = userdata['lnurlp']
+        if self.lnurlp is not None:
+            legacy = 'https://bot.wholestack.nl/'
+            if self.lnurlp.startswith(legacy):
+                self.lnurlp = f"https://{settings.domain}/{self.lnurlp[len(legacy):]}"
         self.lndhub = userdata['lndhub']
         self.lnbitsuserid = userdata['lnbits_userid']
 
