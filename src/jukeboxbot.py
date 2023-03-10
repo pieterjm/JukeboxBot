@@ -1002,7 +1002,7 @@ async def main() -> None:
   <script src="/jukebox/assets/JukeboxBot.js"></script>
 </body>
 </html>
-"""
+""")
     
     async def jukebox_status(request: Request) -> PlainTextResponse:
         if 'chat_id' not in request.query_params:
