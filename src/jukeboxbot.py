@@ -993,7 +993,7 @@ async def main() -> None:
       <div class="image-content">
         <img src="/jukebox/assets/jukeboxbot_payinvoice.png" alt="JukeboxBot" />
         <div class="qr-code-container">
-          <a href="lightning:{invoice.payment_request}"><img id="qr-code-image" alt="QR code image" invoice="{invoice.payment_request}"></a>
+          <img id="qr-code-image" alt="QR code image" invoice="{invoice.payment_request}">
         </div>
         <button class="copy-invoice" aria-label="Copy invoice"></button>
       </div>
