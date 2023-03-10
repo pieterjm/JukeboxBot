@@ -144,7 +144,7 @@ async def get_or_create_user(userid: int,username: str) -> User:
         await settings.lnbits.enableExtension("lndhub",user.lnbitsuserid)
     
         # create lndhub link
-        user.lndhub = f"lndhub://admin:{user.adminkey}@https://jukebox.lightning/lndhub/ext/"
+        user.lndhub = f"lndhub://admin:{user.adminkey}@https://{settings.domain}/lndhub/ext/"
 
         # create lnurlp link
         lnurlpid = await settings.lnbits.createLnurlp(user.adminkey,{
@@ -153,9 +153,9 @@ async def get_or_create_user(userid: int,username: str) -> User:
             "max": settings.fund_max,
             "min": settings.fund_min,
             "comment_chars": 0,
-            "webhook_url": f"https://jukebox.lightning/jukebox/lnbitscallback?userid={user.userid}"
+            "webhook_url": f"https://{settings.domain}/jukebox/lnbitscallback?userid={user.userid}"
         })
-        user.lnurlp = f"https://jukebox.lightning/lnurlp/link/{lnurlpid}"    
+        user.lnurlp = f"https://{settings.domain}/lnurlp/link/{lnurlpid}"    
 
         # save parameters
         settings.rds.hset(user.rediskey,"userdata",user.toJson())

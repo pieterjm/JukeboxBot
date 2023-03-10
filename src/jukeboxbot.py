@@ -219,14 +219,14 @@ async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.send_message(
             chat_id=update.effective_user.id,
             parse_mode='HTML',
-            text="""
+            text=f"""
 To connect this bot to your spotify account, you have to create an app in the developer portal of Spotify <A href="https://developer.spotify.com/dashboard/applications">here</a>.
 
 1. Click on the 'Create an app' button and give the bot a random name and description. Then click 'Create".
 
 2. Record the 'Client ID' and 'Client Secret'. 
 
-3. Click 'Edit Settings' and add EXACTLY this url <pre>https://jukebox.lightning/spotify</pre> under 'Redirect URIs'. Do not forget to click 'Add' and 'Save'
+3. Click 'Edit Settings' and add EXACTLY this url <pre>{settings.spotify_redirect_uri}</pre> under 'Redirect URIs'. Do not forget to click 'Add' and 'Save'
 
 4. Use the /setclientid and /setclientsecret commands to configure the 'Client ID' and 'Client Secret'. 
 
@@ -891,7 +891,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         text=f"@{update.effective_user.username} add '{invoice_title}' to the queue?\n\nClick to pay below or fund the bot with /fund@Jukebox_Lightning_bot.",       
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[        
-            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://jukebox.lightning/jukebox/payinvoice?payment_hash={invoice.payment_hash}"),
+            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://{settings.domain}/jukebox/payinvoice?payment_hash={invoice.payment_hash}"),
             InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))
         ]]))
 
@@ -941,7 +941,7 @@ async def main() -> None:
 
     # Pass webhook settings to telegram
     print(await application.bot.set_webhook(
-        url=f"https://bot.jukebox.lightning/jukebox/telegram",
+        url=f"https://{settings.domain}/jukebox/telegram",
         allowed_updates=['callback_query','message'],
 #        max_connections=settings.max_connections,
 	    ip_address="159.89.7.158"
@@ -989,7 +989,7 @@ async def main() -> None:
 </head>
 <body>
 <h2>Add '{invoice.title}' to the queue?</h2>
-<a href="lightning:{invoice.payment_request}"><img src="https://jukebox.lightning/api/v1/qrcode/{invoice.payment_request}"></a>
+<a href="lightning:{invoice.payment_request}"><img src="https://{settings.domain}/api/v1/qrcode/{invoice.payment_request}"></a>
 <p style="word-break: break-all;">
 {invoice.payment_request}
 </p>
