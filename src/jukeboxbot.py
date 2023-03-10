@@ -1030,6 +1030,11 @@ async def main() -> None:
         logging.info("Got callback from spotify")
         print("Got callback from spotify")
         print(request.url)
+
+        if 'code' not in request.query_params:
+            # callback without code
+            return Response()
+
         code = request.query_params["code"]
         if not re.search("^[A-Za-z0-9\-\_]+$",code):
             logging.warning("authorisation code does not match regex")
