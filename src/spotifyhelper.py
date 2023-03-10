@@ -108,7 +108,7 @@ async def init_auth_manager(chat_id, client_id, client_secret):
     """
     Initialize a spotify auth manager for a specific group
     """
-    logging.indo("init auth manager")
+    logging.info("init auth manager")
     data = {
         'chat_id': chat_id,
         'client_id': client_id,
