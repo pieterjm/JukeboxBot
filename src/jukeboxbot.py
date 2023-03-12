@@ -317,6 +317,7 @@ To connect this bot to your spotify account, you have to create an app in the de
 @debounce
 @adminonly
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    #TODO:  this should be called from within the group
     price = settings.price
 
     if update.message.text == '/price':
@@ -348,6 +349,9 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 @debounce
 async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.chat.type == "private":
+        message = await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=f"Execute the /queue command in the group instead of the private chat.")
         return
     
     # get an auth managher, if no auth manager is available, dump a message
@@ -450,6 +454,9 @@ async def fund(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if update.message.chat.type == "private":
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Execute the /history command in the group instead of the private chat.")
         return
     
     # get an auth managher, if no auth manager is available, dump a message
@@ -549,10 +556,12 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     
     if update.message.chat.type == "private":
-        # TODO: send a message in the private chat to use the command in the group chat
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Execute the /add command in the group instead of the private chat.")
         return
     
-    # get an auth managher, if no auth manager is available, dump a message
+    # get an auth manager, if no auth manager is available, dump a message
     auth_manager = await spotifyhelper.get_auth_manager(update.effective_chat.id)
     if auth_manager is None:
         await context.bot.send_message(
