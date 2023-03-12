@@ -21,6 +21,8 @@ from starlette.routing import Route
 
 from telegram import __version__ as TG_VER
 
+# TODO: custom prijs toevoegen
+
 try:
     from telegram import __version_info__
 except ImportError:
@@ -309,6 +311,38 @@ To connect this bot to your spotify account, you have to create an app in the de
 
             
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
+
+
+# display the play queue
+@debounce
+@adminonly
+async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    price = settings.price
+
+    if update.message.text == '/price':
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            parse_mode='HTML',
+            text=f"Current track prices is {price}")
+        context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
+        return
+
+    newprice = update.message.text.split(' ',1)
+    if len(newprice) > 1:
+        newprice = newprice[1]
+        if newprice.isdigit():
+            newprice = int(newprice)
+            if newprice == 0 or newprice >= 21:
+                price = newprice
+
+                message = await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=f"Updating price to {price} sats. This feature is not functional right now. Price is not actually changed.")
+                return
+    
+    message = await context.bot.send_message(text="Use /price <sats>. Price is either 0 or 21 or more sats.")        
+    context.job_queue.run_once(delete_message, 5, data={'message':message})
+
 
 # display the play queue
 @debounce
@@ -939,6 +973,7 @@ async def main() -> None:
     application.add_handler(CommandHandler('history', history)) # view history of tracks
     application.add_handler(CommandHandler('link',link)) # view LNDHUB QR 
     application.add_handler(CommandHandler('refund', pay)) # pay a lightning invoice
+    application.add_handler(CommandHandler('price', price)) # set the track price
     application.add_handler(CommandHandler('queue', queue)) # view the queue
     application.add_handler(CommandHandler("setclientsecret",spotify_settings)) # set the secret for a spotify app
     application.add_handler(CommandHandler("setclientid",spotify_settings))  # set the clientid or a spotify app
