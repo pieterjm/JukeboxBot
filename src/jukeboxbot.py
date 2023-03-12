@@ -317,7 +317,12 @@ To connect this bot to your spotify account, you have to create an app in the de
 @debounce
 @adminonly
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    #TODO:  this should be called from within the group
+    if update.message.chat.type == "private":
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"The /price command only works in a group chat.")
+        return
+
     price = settings.price
 
     if update.message.text == '/price':
