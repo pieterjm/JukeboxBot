@@ -54,6 +54,13 @@ class User:
             if self.lnurlp.startswith(legacy):
                 self.lnurlp = f"https://{settings.domain}/{self.lnurlp[len(legacy):]}"
         self.lndhub = userdata['lndhub']
+        if self.lndhub is not None:
+            legacy = 'https://bot.wholestack.nl/'
+            if self.lndhub.startswith(legacy):
+                self.lndhub = f"https://{settings.domain}/{self.lndhub[len(legacy):]}"
+        
+
+
         self.lnbitsuserid = userdata['lnbits_userid']
 
 # Get/Create a QR code and store in filename
