@@ -753,7 +753,6 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                     try:            
                         await context.bot.editMessageText(title,chat_id=chat_id,message_id=message_id)
                         now_playing_message[chat_id] = [ message_id, title ]
-                        return
                     except:
                         logging.info("Exception when refreshing now playing")
                         pass
