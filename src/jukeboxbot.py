@@ -716,43 +716,55 @@ async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
 
 async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
     # iterate over all auth managers
-    for key in settings.rds.scan_iter("group:*"):
-        chat_id = key.decode('utf-8').split(':')[1]
-        auth_manager = await spotifyhelper.get_auth_manager(chat_id)
-        if auth_manager is None:
-            continue
+    # TODO: change into a callback per group
+    # that means that there should be another callback that verifies 
 
-        currenttrack = None
-        try:
-            sp = spotipy.Spotify(auth_manager=auth_manager)
-            currenttrack = sp.current_user_playing_track()
-        except:
-            logging.error("Exception while querying the current playing track at spotify")
-            return
+    interval = 300
+    try:
+        for key in settings.rds.scan_iter("group:*"):
+            chat_id = key.decode('utf-8').split(':')[1]
+            auth_manager = await spotifyhelper.get_auth_manager(chat_id)
+            if auth_manager is None:
+                continue
 
-        title = "Nothing playing at the moment"
-        if currenttrack:
-            title = spotifyhelper.get_track_title(currenttrack['item'])
+            currenttrack = None
+            try:
+                sp = spotipy.Spotify(auth_manager=auth_manager)
+                currenttrack = sp.current_user_playing_track()
+            except:
+                logging.error("Exception while querying the current playing track at spotify")
+                return
 
-            # update history
-            await spotifyhelper.update_history(chat_id, title)
+            title = "Nothing playing at the moment"
+            if currenttrack:
+                title = spotifyhelper.get_track_title(currenttrack['item'])
 
-        # update the title
-        if chat_id in now_playing_message:
-            [message_id, prev_title] = now_playing_message[chat_id]
-            if prev_title != title:
-                try:            
-                    await context.bot.editMessageText(title,chat_id=chat_id,message_id=message_id)
-                    now_playing_message[chat_id] = [ message_id, title ]
-                    return
-                except:
-                    logging.info("Exception when refreshing now playing")
-                    pass
-        else:
-            message = await context.bot.send_message(text=title,chat_id=chat_id)
-            await context.bot.pin_chat_message(chat_id=chat_id, message_id=message.id)
-            now_playing_message[chat_id] = [ message.id, title ]
-       
+                # update history
+                await spotifyhelper.update_history(chat_id, title)
+
+                newinterval  = ( currenttrack['item']['duration_ms'] - currenttrack['progress_ms'] ) / 1000 + 2
+                if newinterval < interval:
+                    interval = newinterval
+
+            # update the title
+            if chat_id in now_playing_message:
+                [message_id, prev_title] = now_playing_message[chat_id]
+                if prev_title != title:
+                    try:            
+                        await context.bot.editMessageText(title,chat_id=chat_id,message_id=message_id)
+                        now_playing_message[chat_id] = [ message_id, title ]
+                        return
+                    except:
+                        logging.info("Exception when refreshing now playing")
+                        pass
+            else:
+                message = await context.bot.send_message(text=title,chat_id=chat_id)
+                await context.bot.pin_chat_message(chat_id=chat_id, message_id=message.id)
+                now_playing_message[chat_id] = [ message.id, title ]
+    finally:
+         context.job_queue.run_once(callback_spotify, interval)
+
+
 #callback for button presses
 async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -935,7 +947,8 @@ async def main() -> None:
     application.add_handler(CommandHandler('dj', dj))  # pay another user    
 
     application.add_handler(CallbackQueryHandler(callback_button))
-    application.job_queue.run_repeating(callback_spotify, 10)
+#    application.job_queue.run_repeating(callback_spotify, 10)
+    application.job_queue.run_once(callback_spotify, 2)
 
     # Pass webhook settings to telegram
     print(await application.bot.set_webhook(
