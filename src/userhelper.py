@@ -49,6 +49,7 @@ class User:
         self.adminkey = userdata['adminkey']
         self.walletid = userdata['walletid']
         self.lnurlp = userdata['lnurlp']
+        self.lndhub = userdata['lndhub']
         for legacy in ['bot.wholestack.nl']:
             if self.lnurlp is not None:
                 self.lnurlp = self.lnurlp.replace(legacy,settings.domain)
