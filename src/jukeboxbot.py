@@ -946,7 +946,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # start a loop to check the invoice, for a period of 10 minutes
     ttl = 180
     while ttl > 0:
-        if invoice is not None and invoicehelper.invoice_paid(invoice):
+        if invoice is not None and await invoicehelper.invoice_paid(invoice):
             spotifyhelper.add_to_queue(sp, spotify_uri_list)
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
