@@ -15,6 +15,10 @@ import string
 import telegramhelper
 from telegramhelper import TelegramCommand
 
+#TODO: 
+# get or create user lijkt nog niet altijd goed te gaan
+# lndhub link ga een error, maar gaat wel goed
+
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -452,7 +456,7 @@ async def fund(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id=update.effective_chat.id,
         text=f"Click on the button to fund the wallet of @{user.username}.",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"Fund sats",url=user.lnurlp)]
+            [InlineKeyboardButton(f"Fund sats",url=f"https://{settings.domain}/jukebox/fund?lnurl={userhelper.get_funding_lnurl(user)}")]
             ]))
     context.job_queue.run_once(delete_message, settings.delete_message_timeout_long, data={'message':message})
 
@@ -1069,7 +1073,43 @@ async def main() -> None:
         await callback_paid_invoice(invoice)
             
         return Response()
+
+    async def jukebox_fund(request: Request) -> Response:
+        if 'userid' not in request.query_params:
+            return Response()
+        userid = request.query_params('userid') 
+
+        user = userhelper.get_or_create_user(int(userid)) 
+        if user is None:
+            return      
         
+        lnurl = userhelper.get_funding_lnurl(user)
+
+        return Response("""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fund the wallet of '{user.username}'</title>
+  <link rel="stylesheet" href="/jukebox/assets/JukeboxBot.css">
+</head>
+<body>
+  <div class="container">
+    <div class="image-container">
+      <div class="image-content">
+        <img src="/jukebox/assets/jukeboxbot_fund.png" alt="JukeboxBot" />
+        <div class="qr-code-container">
+          <img id="qr-code-image" alt="QR code image" data="{lnurl}">
+        </div>
+        <button class="copy-data" aria-label="Copy LNRUL"></button>
+      </div>
+    </div>
+  </div>
+  <script src="/jukebox/assets/JukeboxBot.js"></script>
+</body>
+</html>
+""")
+
     async def payinvoice_callback(request: Request) -> Response:
         if 'payment_hash' not in request.query_params:
             return Response("Invoice not found")
@@ -1095,9 +1135,9 @@ async def main() -> None:
       <div class="image-content">
         <img src="/jukebox/assets/jukeboxbot_payinvoice.png" alt="JukeboxBot" />
         <div class="qr-code-container">
-          <img id="qr-code-image" alt="QR code image" invoice="{invoice.payment_request}">
+          <img id="qr-code-image" alt="QR code image" data="{invoice.payment_request}">
         </div>
-        <button class="copy-invoice" aria-label="Copy invoice"></button>
+        <button class="copy-data" aria-label="Copy invoice"></button>
       </div>
     </div>
   </div>
@@ -1223,7 +1263,8 @@ async def main() -> None:
             Route("/spotify", spotify_callback, methods=["GET"]),
             Route("/jukebox/payinvoice",payinvoice_callback, methods=["GET"]),
             Route("/jukebox/invoicecallback",invoicepaid_callback, methods=["POST"]),
-            Route("/jukebox/status.json",jukebox_status, methods=["GET"])
+            Route("/jukebox/status.json",jukebox_status, methods=["GET"]),
+            Route("/jukebox/fund",jukebox_fund, methods=["GET"])
         ]
     )
 
