@@ -26,7 +26,7 @@ def init():
     global ipaddress
 
 
-    domain='jukebox.lighting'
+    domain=os.environ['JUKEBOX_DOMAIN']
     
     # set the new environment and fall back to development
     env = None
