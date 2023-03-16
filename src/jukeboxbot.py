@@ -743,7 +743,7 @@ async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
     This function checks an invoice if it has been paid
     if it does not exist anymore, or the timeout is expired, the callback stops
     """
-    invoice = context.job.data['invoice']
+    invoice = context.job.data
     if invoice is None:
         logging.error("Got callback with a None invoice")
         return
