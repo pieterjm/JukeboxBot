@@ -834,11 +834,11 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """
     This functions handles all button presses that are fed back into the application
     """
-    key = update.callback_query
+    key = update.callback_query.data
 
     # CallbackQueries need to be answered, even if no notification to the user is needed    
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery    
-    await update.query.answer()
+    await update.callback_query.answer()
     
     command = telegramhelper.get_command(key)
 
@@ -860,11 +860,11 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         """
         Cancel just deletes the message
         """
-        await update.query.delete_message()
+        await update.callback_query.delete_message()
         return
     
     if command.command == telegramhelper.cancelinvoice:
-        await update.query.delete_message()
+        await update.callback_query.delete_message()
 
         invoice = command.data
         if invoice is not None:
@@ -903,7 +903,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if  command.command == telegramhelper.add:
         # add a single track to the list
         spotify_uri_list = [command.data]
-        await update.query.delete_message()
+        await update.callback_query.delete_message()
     elif  command.command == telegramhelper.playrandom:
         playlistid = command.data
         result = sp.playlist_items(playlistid,offset=0,limit=1)
