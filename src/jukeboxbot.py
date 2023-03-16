@@ -456,7 +456,7 @@ async def fund(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id=update.effective_chat.id,
         text=f"Click on the button to fund the wallet of @{user.username}.",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"Fund sats",url=f"https://{settings.domain}/jukebox/fund?lnurl={userhelper.get_funding_lnurl(user)}")]
+            [InlineKeyboardButton(f"Fund sats",url=f"https://{settings.domain}/jukebox/fund?userid={update.effective_user.id}")]
             ]))
     context.job_queue.run_once(delete_message, settings.delete_message_timeout_long, data={'message':message})
 
