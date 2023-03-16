@@ -752,7 +752,7 @@ async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
     
     redis_invoice = await invoicehelper.get_invoice(invoice.payment_hash)
     if redis_invoice is None:
-        logging.info("Invoice no longer exists, probably has been paid")
+        logging.info("Invoice no longer exists, probably has been paid or canceled")
         return
 
     # check if invoice was paid    
@@ -772,11 +772,15 @@ async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
         application.job_queue.run_once(check_invoice_callback, 15, data = invoice)
     
 
-async def reset_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
+async def regular_cleanup(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    This function just empties the now playing list so that the callback_spotify function creates a new message
+    This function performs tasks to clean up stuff at regular intervals
+    just empties the now playing list so that the callback_spotify function creates a new message
     """
     now_playing_message = {}
+
+    telegramhelper.purge_commands()
+    
 
 async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -839,6 +843,9 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # CallbackQueries need to be answered, even if no notification to the user is needed    
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery    
     await update.callback_query.answer()
+
+    if key is None:
+        return
     
     command = telegramhelper.get_command(key)
 
@@ -1024,7 +1031,7 @@ async def main() -> None:
     application.add_handler(CommandHandler('dj', dj))  # pay another user    
 
     application.add_handler(CallbackQueryHandler(callback_button))
-    application.job_queue.run_repeating(reset_now_playing, 6 * 3600)
+    application.job_queue.run_repeating(regular_cleanup, 60)
     application.job_queue.run_once(callback_spotify, 2)
 
 

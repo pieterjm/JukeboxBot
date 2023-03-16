@@ -1,5 +1,7 @@
 import random
 import string
+import logging
+from time import time
 
 arf = {}
 
@@ -13,6 +15,7 @@ class TelegramCommand:
         self.userid = userid
         self.command = command
         self.data = data
+        self.time = time()
 
 def add_command(command: TelegramCommand) -> str:
     key = "".join(random.sample(string.ascii_letters,12))
@@ -22,7 +25,13 @@ def add_command(command: TelegramCommand) -> str:
 def get_command(key: str) -> TelegramCommand:
     if key in arf:
         command = arf[key]
-        del arf[key]
         return command
     else:
         return None
+    
+def purge_commands() -> None:
+    now = time()
+    for key in arf:
+        if now - arf[key].time > 30:
+            logging.info("Deleting command from cache")
+            del arf[key]
