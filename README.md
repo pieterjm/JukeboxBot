@@ -9,16 +9,16 @@ A Bitcoin lightning enabled Jukebox for Telegram
  - Jitsi link: https://meet.jit.si/NoderunnersFMRadioRocks24HoursADay
 
 ## Backlog
- - Spotify gave a new error when connecting, test invalid ID's
- - Create nicely designed HTML pages for payment and Spotify connection
+ - Faster payment feedback
+ - Payment feedback in payment HTML page
+ - Create nicely designed payment page for funding
  - Test scripts for telegram itself
- - Create new names and groups for Jukebox_lightning_test and Jukebox_lightning_development
 
 ## Ideas for new features
- - Connect the bot to NOSTR
+ - Connect the bot to NOSTR. How should that fundionaly work? 
  - Audio players other than spotify
  - rewards, gokken.
- - Liedjes faucet, ik gooi geld in de jukebox, maar jullie mogen de muziek uitzoeken
+ - Liedjes faucet, ik gooi geld in de jukebox, maar jullie mogen de muziek uitzoeken. /faucet, when there is money left, /add payment comes from faucet 
  - Silent disco feature! 3-channels, crowd is the dj!
  - Conferences, Bitcoin Amsterdam/Miami etc. 
  - One-to-one communication: Allow users to have a private conversation with to bot. Search for tracks, manage their playlist, add to queue. This one is important to create as it enables to create other features as described below. 
@@ -48,3 +48,6 @@ A Bitcoin lightning enabled Jukebox for Telegram
  - Personal budget for users. Users have personal budget where they can upload money to later spend on payments for songs -> faster payment flow
  - Create another instance of the bot so that it can be used on other groups. 
  - When a payment is not made, the request should be removed after some time (half an hour or so). Appears not to be a mayor issue
+ - Create new names and groups for Jukebox_lightning_test and Jukebox_lightning_development
+ - Spotify gave a new error when connecting, test invalid ID's. Error appears to be resolved
+ - Create nicely designed HTML pages for payment and Spotify connection.
