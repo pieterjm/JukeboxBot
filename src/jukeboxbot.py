@@ -955,7 +955,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await invoicehelper.delete_invoice(invoice.payment_hash)
             await context.bot.delete_message(invoice.chat_id, invoice.message_id)
             return
-        asyncio.sleep(15)
+        await asyncio.sleep(15)
         ttl -= 15
 
     # invoice timeout, delete invoice
