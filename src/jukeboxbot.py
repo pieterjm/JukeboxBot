@@ -856,6 +856,14 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         """
         await query.delete_message()
         return
+    
+    if command.startswith("CANCELINVOICE"):
+        await query.delete_message()
+
+        payment_hash = command.split(':')[1]
+        await invoicehelper.delete_invoice(payment_hash)
+        return
+
 
     # the commands from here on modify a list of tracks to be queue
     # and we have to check hat we have spotify available
@@ -964,7 +972,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[        
             InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://{settings.domain}/jukebox/payinvoice?payment_hash={invoice.payment_hash}"),
-            InlineKeyboardButton('Cancel', callback_data = "{id}:CANCEL".format(id=update.effective_user.id))
+            InlineKeyboardButton('Cancel', callback_data = f"{update.effective_user.id}:CANCELINVOICE:{invoice.payment_hash}")
         ]]))
 
 
