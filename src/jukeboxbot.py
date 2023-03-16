@@ -12,6 +12,8 @@ from http import HTTPStatus
 import redis
 import random
 import string
+import telegramhelper
+from telegramhelper import TelegramCommand
 
 import uvicorn
 from starlette.applications import Starlette
@@ -595,7 +597,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=update.effective_chat.id,
             text=f"@{update.effective_user.username} suggests to play tracks from the '{result['name']}' playlist.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton(f"Pay {settings.price} sats for a random track", callback_data = f"0:PLAYRANDOM:{playlistid}"),
+                InlineKeyboardButton(f"Pay {settings.price} sats for a random track", callback_data = telegramhelper.add_command(0,telegramhelper.playrandom,playlistid))
             ]]))
 
         # start a job to kill the message  after 30 seconds if not used
@@ -614,14 +616,14 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             title = spotifyhelper.get_track_title(item)
             if title not in tracktitles:
                 tracktitles[title] = 1
-                button_list.append([InlineKeyboardButton(title, callback_data = f"{update.effective_user.id}:{item['uri']}")])
+                button_list.append([InlineKeyboardButton(title, callback_data = telegramhelper.add_command(TelegramCommand(update.effective_user.id,telegramhelper.add,item['uri'])))])
                 
                 # max five suggestions
                 if len(tracktitles) == 5:
                     break
 
         # Add a cancel button to the list
-        button_list.append([InlineKeyboardButton('Cancel', callback_data = f"{update.effective_user.id}:CANCEL")])
+        button_list.append([InlineKeyboardButton('Cancel', callback_data = telegramhelper.add_command(TelegramCommand(update.effective_user.id,telegramhelper.cancel,None)))])
 
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -832,36 +834,41 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """
     This functions handles all button presses that are fed back into the application
     """
-    query = update.callback_query
+    key = update.callback_query
 
     # CallbackQueries need to be answered, even if no notification to the user is needed    
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery    
-    await query.answer()
+    await update.query.answer()
     
+    command = telegramhelper.get_command(key)
+
+    if command is None:
+        return
+
     # parse the callback data.
     # TODO: Should convert this into an access reference map pattern
-    userid, command = query.data.split(':',1)        
 
     # only the user that requested the track can select a track
     # or when the userid is explicitly set to 0
-    if int(userid) != 0 and str(userid) != str(update.effective_user.id):
+    if command.userid != 0 and command.userid != update.effective_user.id:
         logging.debug("Avoiding real click")
         return
     
     # process the various commands
     # cancel command
-    if command == 'CANCEL':
+    if command.command == telegramhelper.cancel:
         """
         Cancel just deletes the message
         """
-        await query.delete_message()
+        await update.query.delete_message()
         return
     
-    if command.startswith("CANCELINVOICE"):
-        await query.delete_message()
+    if command.command == telegramhelper.cancelinvoice:
+        await update.query.delete_message()
 
-        payment_hash = command.split(':')[1]
-        await invoicehelper.delete_invoice(payment_hash)
+        invoice = command.data
+        if invoice is not None:
+            await invoicehelper.delete_invoice(invoice.payment_hash)
         return
 
 
@@ -892,19 +899,22 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
                       
     # Play a random track from a playlist
-    spotify_uri_list = []            
-    if command.startswith("PLAYRANDOM"):
-        (command, playlistid) = command.split(':')    
+    spotify_uri_list = []          
+    if  command.command == telegramhelper.add:
+        # add a single track to the list
+        spotify_uri_list = [command.data]
+        await update.query.delete_message()
+    elif  command.command == telegramhelper.playrandom:
+        playlistid = command.data
         result = sp.playlist_items(playlistid,offset=0,limit=1)
         idxs = random.sample(range(0,result['total']),1)
         for idx in idxs:    
             result = sp.playlist_items(playlistid,offset=idx,limit=1)
             for item in result['items']:
-                spotify_uri_list.append(item['track']['uri'])            
+                spotify_uri_list.append(item['track']['uri'])                
     else:
-        # add a single track to the list
-        spotify_uri_list = [command]
-        await query.delete_message()
+        logging.error(f"Unknown command: {command.command}")
+        return
 
     # validate payment conditions
     payment_required = True
@@ -972,7 +982,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[        
             InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://{settings.domain}/jukebox/payinvoice?payment_hash={invoice.payment_hash}"),
-            InlineKeyboardButton('Cancel', callback_data = f"{update.effective_user.id}:CANCELINVOICE:{invoice.payment_hash}")
+            InlineKeyboardButton('Cancel', callback_data = telegramhelper.add_command(update.effective_user.id,telegramhelper.cancelinvoice,invoice))
         ]]))
 
 
