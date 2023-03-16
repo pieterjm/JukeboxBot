@@ -780,7 +780,7 @@ async def regular_cleanup(context: ContextTypes.DEFAULT_TYPE) -> None:
     now_playing_message = {}
 
     telegramhelper.purge_commands()
-    
+
 
 async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -850,6 +850,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     command = telegramhelper.get_command(key)
 
     if command is None:
+        logging.info("Command is None")
         return
 
     # parse the callback data.
@@ -1031,7 +1032,7 @@ async def main() -> None:
     application.add_handler(CommandHandler('dj', dj))  # pay another user    
 
     application.add_handler(CallbackQueryHandler(callback_button))
-    application.job_queue.run_repeating(regular_cleanup, 60)
+    application.job_queue.run_repeating(regular_cleanup, 6 * 3600)
     application.job_queue.run_once(callback_spotify, 2)
 
 
