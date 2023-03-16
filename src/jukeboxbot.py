@@ -538,14 +538,13 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     # pay the invoice
     payment_result = await settings.lnbits.payInvoice(payment_request,user.adminkey)
-    if payment_result['result'] == True:
+    if payment_result['result']:
         await context.bot.send_message(
             chat_id=update.effective_user.id,
             text="Payment succes.")
         logging.info(f"User {user.userid} paid and invoice")
     else:
         logging.warning(payment_result)
-        # TODO, filter on the result detail. It may contain sensitive information
         await context.bot.send_message(
             chat_id=update.effective_user.id,
             parse_mode='HTML',
@@ -690,7 +689,7 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})        
 
         # send a message in the private chat
-        if update.message.reply_to_message.from_user.is_bot == False:
+        if not update.message.reply_to_message.from_user.is_bot:
             message = await context.bot.send_message(
                 chat_id=recipient.userid,
                 text=f"Received {amount} sats from @{sender.username}.")
@@ -702,12 +701,11 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=sender.userid,
             text=f"Sent {amount} sats to  @{recipient.username}.")
 
-
         logging.info(f"User {sender.userid} sent {amount} sats to {recipient.userid}")
     else:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=f"Payment failed. Sorry.")
+            text=f'Payment failed. Sorry.')
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
 
 async def callback_paid_invoice(invoice: Invoice):
@@ -738,34 +736,18 @@ async def callback_paid_invoice(invoice: Invoice):
     # delete the payment request message
     await application.bot.delete_message(invoice.chat_id,invoice.message_id)
     return
-    
 
-# periodic check for a paid invoice            
-async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
-    # check if the invoice has been paid
-    cancel_invoice = context.job.data['cancel']
-    payment_hash = context.job.data['payment_hash']
-    invoice = await invoicehelper.get_invoice(payment_hash)
-    if invoice is None:
-        logging.info("No invoice in check_invoice_callback")
-        return
-
-    # cancel the invoice
-    if cancel_invoice == True:
-        if invoice is not None:
-            await invoicehelper.delete_invoice(payment_hash)
-            await context.bot.delete_message(invoice.chat_id,invoice.message_id)            
-        return
-    
-    # check if invoice was paid    
-    logging.info(invoice)
-    if await invoicehelper.invoice_paid(invoice) == True:
-        await callback_paid_invoice(invoice)
+async def reset_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    This function just empties the now playing list so that the callback_spotify function creates a new message
+    """
+    now_playing_message = {}
 
 async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
-    # iterate over all auth managers
-    # TODO: change into a callback per group
-    # that means that there should be another callback that verifies 
+    """
+    This function creates a message of the current playing track. It reschedules itself depending on the remaining time
+    for the current playing track. Basically two seconds after the time, the first track has finished playing
+    """
 
     interval = 300
     try:
@@ -909,9 +891,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         title += f",'{spotifyhelper.get_track_title(sp.track(spotify_uri_list[0]))}'"
 
     # create the invoice
-    # TODO, admin is the owner of the group
-    # get the user the is owner of the group
-    # TODO: maak setowner command om een user owner van de groep te maken. Die kan spotify koppelen
+    # the owner is the one that has his spotify player connected
     recipient = await userhelper.get_group_owner(update.effective_chat.id)
     invoice = await invoicehelper.create_invoice(recipient, amount_to_pay, invoice_title)
 
@@ -961,11 +941,26 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # and save the invoice
     await invoicehelper.save_invoice(invoice)
 
-    # create a short timeout as fall back
-    context.job_queue.run_once(check_invoice_callback, settings.delete_message_timeout_medium, data={'payment_hash':invoice.payment_hash,'cancel':False})
-    
-    # create a short timeout as fall back to cancel the invoice
-    context.job_queue.run_once(check_invoice_callback, settings.delete_message_timeout_long, data={'payment_hash':invoice.payment_hash,'cancel':True})
+
+    # change this into an SSE
+    # start a loop to check the invoice, for a period of 10 minutes
+    ttl = 180
+    while ttl > 0:
+        if invoice is not None and invoicehelper.invoice_paid(invoice):
+            spotifyhelper.add_to_queue(sp, spotify_uri_list)
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                parse_mode='HTML',
+                text=f"'{invoice_title}' was added to the queue.")
+            await invoicehelper.delete_invoice(invoice.payment_hash)
+            await context.bot.delete_message(invoice.chat_id, invoice.message_id)
+            return
+        asyncio.sleep(15)
+        ttl -= 15
+
+    # invoice timeout, delete invoice
+    await invoicehelper.delete_invoice(invoice.payment_hash)
+    await context.bot.delete_message(invoice.chat_id, invoice.message_id)
 
 
 async def main() -> None:
@@ -995,7 +990,7 @@ async def main() -> None:
     application.add_handler(CommandHandler('dj', dj))  # pay another user    
 
     application.add_handler(CallbackQueryHandler(callback_button))
-#    application.job_queue.run_repeating(callback_spotify, 10)
+    application.job_queue.run_repeating(reset_now_playing, 6 * 3600)
     application.job_queue.run_once(callback_spotify, 2)
 
     # Pass webhook settings to telegram
@@ -1003,7 +998,7 @@ async def main() -> None:
         url=f"https://{settings.domain}/jukebox/telegram",
         allowed_updates=['callback_query','message'],
 #        max_connections=settings.max_connections,
-	    ip_address="159.89.7.158"
+	    ip_address=settings.ipaddress
     ))
 
     # Set up webserver
@@ -1067,7 +1062,7 @@ async def main() -> None:
     
     async def jukebox_status(request: Request) -> PlainTextResponse:
         if 'chat_id' not in request.query_params:
-            return Response({})
+            return Response("{}",media_type="application/json")
         
         chat_id = request.query_params["chat_id"]
 

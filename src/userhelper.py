@@ -7,6 +7,7 @@ import json
 import logging
 import qrcode
 import os
+import re
 from time import time
 
 class User:
@@ -100,6 +101,18 @@ async def set_group_owner(chat_id: int, userid: int) -> None:
         assert(userid == rds_userid)
     data = settings.rds.hset(f"group:{chat_id}","owner",userid)
 
+async def get_funding_lnurl(user: User) -> str:
+    """
+    Return the funding LNURL
+    """
+    result = re.search(".*\/([A-Za-z0-9]+)",user.lnurlp)
+    if result:
+        payid = result.groups()[0]
+        details = settings.lnbits.getLnurlp(f"https://{settings.domain}/",user.invoicekey,payid)
+        return details['lnurl']
+    else:
+        return None
+
 async def get_or_create_user(userid: int,username: str) -> User:
     """
     Get or create a user in redis and lnbits and return the user object
@@ -144,7 +157,6 @@ async def get_or_create_user(userid: int,username: str) -> User:
         user.adminkey = wallet['adminkey']
         user.walletid = wallet['id']
 
-        # TODO, it looks like this goes well for a user that is configured, but has no extensions configured
         # enable extensions for user
         await settings.lnbits.enableExtension("lnurlp",user.lnbitsuserid)
         await settings.lnbits.enableExtension("lndhub",user.lnbitsuserid)

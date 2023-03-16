@@ -23,6 +23,7 @@ def init():
     global qrcode_path
     global port
     global max_connections
+    global ipaddress
 
 
     domain='jukebox.lighting'
@@ -64,6 +65,7 @@ def init():
         os.environ['LNBITS_USRKEY'])
     bot_token=os.environ['BOT_TOKEN']
     qrcode_path = '/tmp'
+    ipaddress = os.environ['BOT_IPADDRESS']
 
 
     environment = env

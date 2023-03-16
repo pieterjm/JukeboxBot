@@ -122,6 +122,17 @@ class LNbits:
             result = response.json()
             return result['id']
 
+    # retrieves LNURLP link
+    async def getLnurlp(self, baseurl, adminkey, payid):
+        """
+        Retrieve a Lnurlp link details
+        """
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{baseurl}/lnurlp/api/v1/links/{payid}",
+                headers={'X-Api-Key':adminkey})
+            return response.json()
+
     # check wether an invoice has been paid. Returns True if paid. Otherwise False
     async def checkInvoice(self,invoicekey,payment_hash):
         async with httpx.AsyncClient() as client:
