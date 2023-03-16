@@ -879,7 +879,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 parse_mode='HTML',
-                text=f"@{update.effective_user.username} added '{spotifyhelper.get_track_title(sp.track(uri))}' to the queue.")
+                text=f"'{spotifyhelper.get_track_title(sp.track(uri))}' was added to the queue.")
             await context.bot.send_message(
                 chat_id=update.effective_user.id,
                 parse_mode='HTML',
@@ -953,7 +953,10 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 parse_mode='HTML',
                 text=f"'{invoice_title}' was added to the queue.")
             await invoicehelper.delete_invoice(invoice.payment_hash)
-            await context.bot.delete_message(invoice.chat_id, invoice.message_id)
+            try:
+                await context.bot.delete_message(invoice.chat_id, invoice.message_id)
+            except:
+                pass
             return
         await asyncio.sleep(15)
         ttl -= 15
