@@ -73,20 +73,13 @@ def get_qrcode_filename(data: str) -> str:
 
 async def get_group_owner(chat_id: int) -> User:
     data = settings.rds.hget(f"group:{chat_id}","owner")
-    if data is None:
-        return None
-
-    userid = data.decode('utf-8')
-    rediskey = f"user:{userid}"
-
-    userdata = settings.rds.hget(rediskey,"userdata")
-    if userdata is None:
-        return None
+    assert(data is not None)
     
-    user = User(userid,None)
-    user.loadJson(userdata)
-    return user
+    userid = data.decode('utf-8')
 
+    return get_or_create_user(userid)    
+
+  
 async def delete_group_owner(chat_id: int) -> None:
     data = settings.rds.hdel(f"group:{chat_id}","owner")
 
@@ -113,7 +106,7 @@ async def get_funding_lnurl(user: User) -> str:
     else:
         return None
 
-async def get_or_create_user(userid: int,username: str) -> User:
+async def get_or_create_user(userid: int,username: str = None) -> User:
     """
     Get or create a user in redis and lnbits and return the user object
     """    

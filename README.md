@@ -51,3 +51,12 @@ A Bitcoin lightning enabled Jukebox for Telegram
  - Create new names and groups for Jukebox_lightning_test and Jukebox_lightning_development
  - Spotify gave a new error when connecting, test invalid ID's. Error appears to be resolved
  - Create nicely designed HTML pages for payment and Spotify connection.
+
+## Test
+
+Connect bot to test group
+Disconnect from spotify
+queue
+history
+add
+
