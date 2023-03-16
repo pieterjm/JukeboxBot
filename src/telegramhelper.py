@@ -11,7 +11,7 @@ cancel = 'CANCEL'
 cancelinvoice = 'CANCELINVOICE'
 
 class TelegramCommand:
-    def __init__(self, userid, command, data):
+    def __init__(self, userid, command, data = None):
         self.userid = userid
         self.command = command
         self.data = data
