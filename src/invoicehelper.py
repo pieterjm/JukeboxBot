@@ -22,6 +22,7 @@ class Invoice:
         self.title = None
         self.chat_id = None
         self.message_id = None
+        self.ttl = 300
     
     def toJson(self):
         userdata = {

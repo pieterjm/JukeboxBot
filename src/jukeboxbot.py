@@ -715,6 +715,7 @@ async def callback_paid_invoice(invoice: Invoice):
     if invoice.chat_id is None:
         logging.error("Invoice chat_id is None")
         return
+    await invoicehelper.delete_invoice(invoice.payment_hash)
 
     auth_manager = await spotifyhelper.get_auth_manager(invoice.chat_id)
     if auth_manager is None:
@@ -727,7 +728,7 @@ async def callback_paid_invoice(invoice: Invoice):
     await application.bot.send_message(
         chat_id=invoice.chat_id,
         parse_mode='HTML',
-        text=f"@{invoice.user.username} added {invoice.title} to the queue.")
+        text=f"'{invoice.title}' was added to the queue.")
     await application.bot.send_message(
         chat_id=invoice.user.userid,
         parse_mode='HTML',
@@ -736,6 +737,38 @@ async def callback_paid_invoice(invoice: Invoice):
     # delete the payment request message
     await application.bot.delete_message(invoice.chat_id,invoice.message_id)
     return
+
+async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
+    """
+    This function checks an invoice if it has been paid
+    if it does not exist anymore, or the timeout is expired, the callback stops
+    """
+    invoice = context.job.data['invoice']
+    if invoice is None:
+        logging.error("Got callback with a None invoice")
+        return
+    
+    redis_invoice = await invoicehelper.get_invoice(invoice.payment_hash)
+    if redis_invoice is None:
+        logging.info("Invoice no longer exists, probably has been paid")
+        return
+
+    # check if invoice was paid    
+    if await invoicehelper.invoice_paid(invoice) == True:
+        await callback_paid_invoice(invoice)
+        return
+
+    # invoice has not been paid
+    invoice.ttl -= 15
+    if invoice.ttl <= 0:
+        await invoicehelper.delete_invoice(invoice.payment_hash)
+        try:
+            await context.bot.delete_message(invoice.chat_id,invoice.message_id)            
+        except:
+            pass
+    else:
+        application.job_queue.run_once(check_invoice_callback, 15, data = invoice)
+    
 
 async def reset_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -941,29 +974,9 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # and save the invoice
     await invoicehelper.save_invoice(invoice)
 
-
     # change this into an SSE
     # start a loop to check the invoice, for a period of 10 minutes
-    ttl = 180
-    while ttl > 0:
-        if invoice is not None and await invoicehelper.invoice_paid(invoice):
-            spotifyhelper.add_to_queue(sp, spotify_uri_list)
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                parse_mode='HTML',
-                text=f"'{invoice_title}' was added to the queue.")
-            await invoicehelper.delete_invoice(invoice.payment_hash)
-            try:
-                await context.bot.delete_message(invoice.chat_id, invoice.message_id)
-            except:
-                pass
-            return
-        await asyncio.sleep(15)
-        ttl -= 15
-
-    # invoice timeout, delete invoice
-    await invoicehelper.delete_invoice(invoice.payment_hash)
-    await context.bot.delete_message(invoice.chat_id, invoice.message_id)
+    application.job_queue.run_once(check_invoice_callback, 15, data = invoice)
 
 
 async def main() -> None:
