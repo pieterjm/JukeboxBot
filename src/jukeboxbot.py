@@ -456,7 +456,7 @@ async def fund(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id=update.effective_chat.id,
         text=f"Click on the button to fund the wallet of @{user.username}.",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"Fund sats",url=f"https://{settings.domain}/jukebox/fund?userid={update.effective_user.id}")]
+            [InlineKeyboardButton(f"Fund sats",url=f"https://{settings.domain}/jukebox/fund?command={telegramhelper.add_command(TelegramCommand(update.effective_user.id,'FUND'))}")]
             ]))
     context.job_queue.run_once(delete_message, settings.delete_message_timeout_long, data={'message':message})
 
@@ -1075,11 +1075,18 @@ async def main() -> None:
         return Response()
 
     async def jukebox_fund(request: Request) -> Response:
-        if 'userid' not in request.query_params:
+        if 'command' not in request.query_params:
             return Response()
-        userid = request.query_params('userid') 
 
-        user = userhelper.get_or_create_user(int(userid)) 
+        key = request.query_params('command') 
+        command = telegramhelper.get_command(key)
+        if command is None:
+            return Response()
+
+        if command.command != 'FUND':
+            return Response()
+
+        user = userhelper.get_or_create_user(command.userid) 
         if user is None:
             return      
         
