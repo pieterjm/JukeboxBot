@@ -993,13 +993,17 @@ async def main() -> None:
     application.job_queue.run_repeating(reset_now_playing, 6 * 3600)
     application.job_queue.run_once(callback_spotify, 2)
 
+
+
     # Pass webhook settings to telegram
-    print(await application.bot.set_webhook(
+    logging.info(f"Jukebox url: \"https://{settings.domain}/jukebox/telegram\"")
+    logging.info(f"Jukebox IP: {settings.ipaddress}")
+    await application.bot.set_webhook(
         url=f"https://{settings.domain}/jukebox/telegram",
         allowed_updates=['callback_query','message'],
-#        max_connections=settings.max_connections,
 	    ip_address=settings.ipaddress
-    ))
+    )
+
 
     # Set up webserver
     async def telegram(request: Request) -> Response:
