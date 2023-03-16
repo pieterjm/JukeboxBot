@@ -597,7 +597,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=update.effective_chat.id,
             text=f"@{update.effective_user.username} suggests to play tracks from the '{result['name']}' playlist.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton(f"Pay {settings.price} sats for a random track", callback_data = telegramhelper.add_command(0,telegramhelper.playrandom,playlistid))
+                InlineKeyboardButton(f"Pay {settings.price} sats for a random track", callback_data = telegramhelper.add_command(TelegramCommand(0,telegramhelper.playrandom,playlistid)))
             ]]))
 
         # start a job to kill the message  after 30 seconds if not used
@@ -982,7 +982,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[        
             InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://{settings.domain}/jukebox/payinvoice?payment_hash={invoice.payment_hash}"),
-            InlineKeyboardButton('Cancel', callback_data = telegramhelper.add_command(update.effective_user.id,telegramhelper.cancelinvoice,invoice))
+            InlineKeyboardButton('Cancel', callback_data = telegramhelper.add_command(TelegramCommand(update.effective_user.id,telegramhelper.cancelinvoice,invoice)))
         ]]))
 
 
