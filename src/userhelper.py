@@ -77,7 +77,7 @@ async def get_group_owner(chat_id: int) -> User:
     
     userid = data.decode('utf-8')
 
-    return get_or_create_user(userid)    
+    return await get_or_create_user(userid)    
 
   
 async def delete_group_owner(chat_id: int) -> None:
