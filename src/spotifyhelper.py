@@ -91,6 +91,22 @@ def get_track_title(item):
                 
     return f"{artist} - {track}"
 
+async def get_price(chat_id):
+    """
+    Gets the price for tracks in this group. Defaults to the initial price of 21 sats
+    """
+    rediskey = f"group:{chat_id}"
+    price = settings.rds.hget(rediskey,"price")
+    if price is None:
+        price = settings.price
+    return int(price)
+
+async def set_price(chat_id, price):
+    """
+    Set the price in a group
+    """
+    rediskey = f"group:{chat_id}"
+    price = settings.rds.hset(rediskey,"price",price)
 
 async def create_auth_manager(chat_id, client_id, client_secret):
     logging.info("create auth manager")

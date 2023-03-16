@@ -129,7 +129,7 @@ class LNbits:
         """
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{baseurl}/lnurlp/api/v1/links/{payid}",
+                f"{baseurl}lnurlp/api/v1/links/{payid}",
                 headers={'X-Api-Key':adminkey})
             return response.json()
 

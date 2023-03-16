@@ -18,6 +18,7 @@ from telegramhelper import TelegramCommand
 #TODO: 
 # get or create user lijkt nog niet altijd goed te gaan
 # lndhub link ga een error, maar gaat wel goed
+# bij kopieren, CSS aanpassen
 
 import uvicorn
 from starlette.applications import Starlette
@@ -329,13 +330,13 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text=f"The /price command only works in a group chat.")
         return
 
-    price = settings.price
+    price = await spotifyhelper.get_price(update.effective_chat.id)
 
     if update.message.text == '/price':
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
-            text=f"Current track prices is {price}")
+            text=f"Current track price is {price}")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
         return
 
@@ -347,12 +348,16 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             if newprice == 0 or newprice >= 21:
                 price = newprice
 
+                await spotifyhelper.set_price(update.effective_chat.id, price)
+
                 message = await context.bot.send_message(
                     chat_id=update.effective_chat.id,
-                    text=f"Updating price to {price} sats. This feature is not functional right now. Price is not actually changed.")
+                    text=f"Updating price to {price} sats.")
                 return
     
-    message = await context.bot.send_message(text="Use /price <sats>. Price is either 0 or 21 or more sats.")        
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Use /price <sats>. Price is either 0 or 21 or more sats.")        
     context.job_queue.run_once(delete_message, 5, data={'message':message})
 
 
@@ -601,7 +606,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=update.effective_chat.id,
             text=f"@{update.effective_user.username} suggests to play tracks from the '{result['name']}' playlist.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton(f"Pay {settings.price} sats for a random track", callback_data = telegramhelper.add_command(TelegramCommand(0,telegramhelper.playrandom,playlistid)))
+                InlineKeyboardButton(f"Pay {await spotifyhelper.get_price(update.effective_chat.id)} sats for a random track", callback_data = telegramhelper.add_command(TelegramCommand(0,telegramhelper.playrandom,playlistid)))
             ]]))
 
         # start a job to kill the message  after 30 seconds if not used
@@ -652,12 +657,12 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.reply_to_message is None:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=f"The /dj command only works as a reply to another user. If no amount is specified, the price for a track, {settings.price} is sent.")
+            text=f"The /dj command only works as a reply to another user. If no amount is specified, the price for a track, {await spotifyhelper.get_price(update.effective_chat.id)} is sent.")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
         return
 
     # parse the amount to be paid
-    amount = settings.price
+    amount = await spotifyhelper.get_price(update.effective_chat.id)
     result = re.search("/[a-z]+(\s+([0-9]+))?\s*$",update.message.text)
     if result is not None:
         amount = result.groups()[1]
@@ -930,7 +935,8 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # validate payment conditions
     payment_required = True
-    amount_to_pay = int(settings.price * len(spotify_uri_list))    
+    amount_to_pay = int((await spotifyhelper.get_price(update.effective_chat.id)) * len(spotify_uri_list))    
+    logging.info(f"Amount to pay = {amount_to_pay}")
     if amount_to_pay == 0:
         payment_required = False
             
@@ -942,12 +948,15 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 parse_mode='HTML',
-                text=f"'{spotifyhelper.get_track_title(sp.track(uri))}' was added to the queue.")
+                text=f"@{update.effective_user.username} added '{spotifyhelper.get_track_title(sp.track(uri))}' to the queue.")
             await context.bot.send_message(
                 chat_id=update.effective_user.id,
                 parse_mode='HTML',
-                text=f"You added '{spotifyhelper.get_track_title(sp.track(uri))}' to the queue.")
+                text=f"You added '{spotifyhelper.get_track_title(sp.track(uri))}' to the queue for {amount_to_pay} sats.")
                 
+        # return 
+        return
+        
     # create an invoice title
     invoice_title = f"'{spotifyhelper.get_track_title(sp.track(spotify_uri_list[0]))}'"
     for i in range(1,len(spotify_uri_list)):
@@ -1078,7 +1087,7 @@ async def main() -> None:
         if 'command' not in request.query_params:
             return Response()
 
-        key = request.query_params('command') 
+        key = request.query_params['command'] 
         command = telegramhelper.get_command(key)
         if command is None:
             return Response()
@@ -1086,13 +1095,14 @@ async def main() -> None:
         if command.command != 'FUND':
             return Response()
 
-        user = userhelper.get_or_create_user(command.userid) 
+        user = await userhelper.get_or_create_user(command.userid) 
         if user is None:
             return      
         
-        lnurl = userhelper.get_funding_lnurl(user)
+        lnurl = await userhelper.get_funding_lnurl(user)
 
-        return Response("""
+
+        return Response(f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>

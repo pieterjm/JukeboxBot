@@ -101,7 +101,7 @@ async def get_funding_lnurl(user: User) -> str:
     result = re.search(".*\/([A-Za-z0-9]+)",user.lnurlp)
     if result:
         payid = result.groups()[0]
-        details = settings.lnbits.getLnurlp(f"https://{settings.domain}/",user.invoicekey,payid)
+        details = await settings.lnbits.getLnurlp(f"https://{settings.domain}/",user.invoicekey,payid)
         return details['lnurl']
     else:
         return None
@@ -164,7 +164,7 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
             "max": settings.fund_max,
             "min": settings.fund_min,
             "comment_chars": 0,
-            "webhook_url": f"https://{settings.domain}/jukebox/lnbitscallback?userid={user.userid}"
+            "webhook_url": f"http://127.0.0.1:7000/jukebox/lnbitscallback?userid={user.userid}"
         })
         user.lnurlp = f"https://{settings.domain}/lnurlp/link/{lnurlpid}"    
 
