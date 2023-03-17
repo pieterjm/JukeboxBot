@@ -457,9 +457,14 @@ async def spotify_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 @debounce
 async def fund(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
+
+    text = f"Click on the button to fund the wallet of @{user.username}."
+    if user.lnaddress is not None:
+        text += f"\nYou can also fund the wallet by sending sats to the following address: {user.lnaddress}"
+
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"Click on the button to fund the wallet of @{user.username}.",
+        text=text,
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(f"Fund sats",url=f"https://{settings.domain}/jukebox/fund?command={telegramhelper.add_command(TelegramCommand(update.effective_user.id,'FUND'))}")]
             ]))
