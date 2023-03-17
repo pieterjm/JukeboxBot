@@ -112,15 +112,45 @@ class LNbits:
                 return False
         
     # creates LNURLP link
-    async def createLnurlp(self, adminkey, json):
+    async def createLnurlp(self, adminkey, payload):
+        # delete all previous paylinks, there could be conflicts
+        paylinks = []
+
+        # get all paylinks
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.protocol}://{self.host}/lnurlp/api/v1/links",
+                headers={'X-Api-Key':adminkey})            
+            paylinks.extend(response.json())
+    
+
+        # delete all paylinks
+        for paylink in paylinks:
+            logging.info(f"Deleting old paylink with id {paylink['id']}")
+            async with httpx.AsyncClient() as client:
+                response = await client.delete(
+                    f"{self.protocol}://{self.host}/lnurlp/api/v1/links/{paylink['id']}",
+                    headers={'X-Api-Key':adminkey})            
+                
         # create lnurlp link
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.protocol}://{self.host}/lnurlp/api/v1/links",
-                json=json,
-                headers={'X-Api-Key':adminkey})
+                json=payload,
+                headers={'X-Api-Key':adminkey})            
             result = response.json()
-            return result['id']
+
+            
+            if not 'id' in result:
+                if result['detail'].startswith("Username already exists."):
+                    logging.warning(f"Username already exists {payload['username']}, retrying without username")
+                    del payload['username']
+                    return await self.createLnurlp(adminkey,payload)
+                else:
+                    logging.error(f"Could not create Lnurlpay link for payload '{json.dumps(payload)}'  the response was: '{json.dumps(result)}'")
+                    return None
+            else:
+                return result
 
     # retrieves LNURLP link
     async def getLnurlp(self, baseurl, adminkey, payid):

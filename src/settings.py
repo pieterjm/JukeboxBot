@@ -78,6 +78,7 @@ def init():
         return True
     elif env == 'development':
         logging.basicConfig(
+            filename="logfile.dat",
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             level=logging.INFO
         )

@@ -21,6 +21,7 @@ class User:
         self.walletid = None
         self.lnurlp = None
         self.lndhub = None
+        self.lnaddress = None
 
     def toJson(self) -> str:
         userdata = {
@@ -33,6 +34,10 @@ class User:
             'lnurlp':self.lnurlp,
             'lndhub':self.lndhub
         }
+
+        if self.lnaddress is not None:
+            userdata['lnaddress'] = self.lnaddress
+
         return json.dumps(userdata)
         
     def loadJson(self, data: str) -> None:
@@ -58,6 +63,13 @@ class User:
                 self.lndhub = self.lndhub.replace(legacy,settings.domain)
 
         self.lnbitsuserid = userdata['lnbits_userid']
+
+        # get lnaddress
+        if 'lnaddress' in userdata and userdata['lnaddress'] is not None:
+            self.lnaddress = userdata['lnaddress']
+        else:
+            self.lnaddress = None
+       
 
 # Get/Create a QR code and store in filename
 def get_qrcode_filename(data: str) -> str:
@@ -157,16 +169,36 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
         # create lndhub link
         user.lndhub = f"lndhub://admin:{user.adminkey}@https://{settings.domain}/lndhub/ext/"
 
-        # create lnurlp link
-        lnurlpid = await settings.lnbits.createLnurlp(user.adminkey,{
-            "description": f"Fund the wallet of @{user.username}",
+
+        payload = {
             "amount": settings.price,
             "max": settings.fund_max,
             "min": settings.fund_min,
             "comment_chars": 0,
             "webhook_url": f"http://127.0.0.1:7000/jukebox/lnbitscallback?userid={user.userid}"
-        })
-        user.lnurlp = f"https://{settings.domain}/lnurlp/link/{lnurlpid}"    
+        }
+
+        if user.username is not None:
+            lnuname = user.username.lower()
+            lnuname.replace(' ','_')
+            if re.search('^[a-z0-9\-_\.]+$',lnuname): 
+                payload['username'] = lnuname
+            else:
+                logging.info(f"Username not allowed for lnaddress {lnuname}")
+            payload["description"] = f"Fund the Jukebox wallet of @{user.username}"
+        else:
+            logging.error(f"username is None for telegram user: {user.id}")
+            payload['description'] = "Fund your personal Jukebox Wallet"
+        
+
+        # create lnurlp link
+        result = await settings.lnbits.createLnurlp(user.adminkey,payload)
+        if result is not None:
+            user.lnurlp = f"https://{settings.domain}/lnurlp/link/{result['id']}"    
+            if result['username'] is not None:
+                user.lnaddress = f"{result['username']}@{settings.domain}"
+        else:
+            user.lnurlp = None
 
         # save parameters
         settings.rds.hset(user.rediskey,"userdata",user.toJson())
