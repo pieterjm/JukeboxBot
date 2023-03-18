@@ -32,6 +32,6 @@ def get_command(key: str) -> TelegramCommand:
 def purge_commands() -> None:
     now = time()
     for key in list(arf.keys()):
-        if now - arf[key].time > 1800: # 20 minutes
+        if now - arf[key].time > 3600: # 60 minutes
             logging.info("Deleting command from cache")
             del arf[key]

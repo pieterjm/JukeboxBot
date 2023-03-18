@@ -791,7 +791,9 @@ async def regular_cleanup(context: ContextTypes.DEFAULT_TYPE) -> None:
     This function performs tasks to clean up stuff at regular intervals
     just empties the now playing list so that the callback_spotify function creates a new message
     """
-    now_playing_message = {}
+    logging.info("Running regular clean up")
+    for chatid in list(now_playing_message.keys()):
+        del now_playing_message[chatid]
 
     telegramhelper.purge_commands()
 
@@ -840,11 +842,14 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                         logging.info("Exception when refreshing now playing")
                         pass
             else:
+                logging.info("Creating new pinned message")
                 message = await context.bot.send_message(text=title,chat_id=chat_id)
                 await context.bot.pin_chat_message(chat_id=chat_id, message_id=message.id)
                 now_playing_message[chat_id] = [ message.id, title ]
     finally:
-         context.job_queue.run_once(callback_spotify, interval)
+        if interval < 1 or interval > 300:
+            interval = 60
+        context.job_queue.run_once(callback_spotify, interval)
 
 
 #callback for button presses
@@ -1050,7 +1055,7 @@ async def main() -> None:
     application.add_handler(CommandHandler('dj', dj))  # pay another user    
 
     application.add_handler(CallbackQueryHandler(callback_button))
-    application.job_queue.run_repeating(regular_cleanup, 6 * 3600)
+    application.job_queue.run_repeating(regular_cleanup, 3600)
     application.job_queue.run_once(callback_spotify, 2)
 
 
