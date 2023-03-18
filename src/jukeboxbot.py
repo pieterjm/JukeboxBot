@@ -1055,7 +1055,7 @@ async def main() -> None:
     application.add_handler(CommandHandler('dj', dj))  # pay another user    
 
     application.add_handler(CallbackQueryHandler(callback_button))
-    application.job_queue.run_repeating(regular_cleanup, 3600)
+    application.job_queue.run_repeating(regular_cleanup, 3 * 3600)
     application.job_queue.run_once(callback_spotify, 2)
 
 

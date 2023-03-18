@@ -78,6 +78,9 @@ def get_track_title(item):
     """
     Get a readable version of the track title
     """
+    if item is None:
+        return ""
+    
     artist=item['artists'][0]['name']
     track=item['name']
 
