@@ -181,6 +181,8 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
         if user.username is not None:
             lnuname = user.username.lower()
             lnuname.replace(' ','_')
+            lnuname = lnuname[:15]
+
             if re.search('^[a-z0-9\-_\.]+$',lnuname): 
                 payload['username'] = lnuname
             else:
