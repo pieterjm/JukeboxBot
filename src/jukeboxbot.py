@@ -1188,16 +1188,16 @@ async def main() -> None:
 
         # create spotify instance
         sp = spotipy.Spotify(auth_manager=auth_manager)
-    
+
         # get the current track
         track = sp.current_user_playing_track()
-        title = "Nothing is playing at the moment"    
-        if track:                    
-            title = spotifyhelper.get_track_title(track['item'])       
+        title = "Nothing is playing at the moment"
+        if track:
+            title = spotifyhelper.get_track_title(track['item'])
         return PlainTextResponse(f'{{"title":"{title}"}}',media_type="application/json")
 
     async def spotify_callback(request: Request) -> PlainTextResponse:
-        """ 
+        """
         This function handles the callback from spotify when authorizing request to an account
 
         A typical request will like like the following
