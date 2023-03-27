@@ -7,7 +7,7 @@ from userhelper import User
 
 settings.init()
 
-
+total = 0
 for userkey in settings.rds.scan_iter("user:*"):
     userdata = settings.rds.hget(userkey,"userdata")
 
@@ -18,4 +18,9 @@ for userkey in settings.rds.scan_iter("user:*"):
         tguserid = userdata['telegram_userid']
 
         user = asyncio.run(userhelper.get_or_create_user(tguserid, tgusername))
-        print(tgusername,asyncio.run(userhelper.get_balance(user)))
+        balance = asyncio.run(userhelper.get_balance(user))
+        print(user.username, balance)
+        total += balance
+    else:
+        print("got a none user")
+print(total)

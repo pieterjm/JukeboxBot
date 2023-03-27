@@ -821,7 +821,8 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                 return
 
             title = "Nothing playing at the moment"
-            if currenttrack:
+            if currenttrack is not None and 'item' in currenttrack and currenttrack['item'] is not None:
+                print(json.dumps(currenttrack))
                 title = spotifyhelper.get_track_title(currenttrack['item'])
 
                 # update history
@@ -1055,7 +1056,7 @@ async def main() -> None:
     application.add_handler(CommandHandler('dj', dj))  # pay another user    
 
     application.add_handler(CallbackQueryHandler(callback_button))
-    application.job_queue.run_repeating(regular_cleanup, 3600)
+    application.job_queue.run_repeating(regular_cleanup, 12 * 3600)
     application.job_queue.run_once(callback_spotify, 2)
 
 
