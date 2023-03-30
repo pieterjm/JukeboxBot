@@ -1129,13 +1129,13 @@ async def main() -> None:
       <div class="image-content">
         <img src="/jukebox/assets/jukeboxbot_fund.png" alt="JukeboxBot" />
         <div class="qr-code-container">
-          <img id="qr-code-image" alt="QR code image" data="{lnurl}">
+          <img id="qr-code-image" alt="QR code image" lnurl="{lnurl}">
         </div>
         <button class="copy-data" aria-label="Copy LNRUL"></button>
       </div>
     </div>
   </div>
-  <script src="/jukebox/assets/JukeboxBot.js"></script>
+  <script src="/jukebox/assets/JukeboxBotFund.js"></script>
 </body>
 </html>
 """)
@@ -1165,13 +1165,13 @@ async def main() -> None:
       <div class="image-content">
         <img src="/jukebox/assets/jukeboxbot_payinvoice.png" alt="JukeboxBot" />
         <div class="qr-code-container">
-          <img id="qr-code-image" alt="QR code image" data="{invoice.payment_request}">
+          <img id="qr-code-image" alt="QR code image" invoice="{invoice.payment_request}" paymenthash="{invoice.payment_hash}">
         </div>
         <button class="copy-data" aria-label="Copy invoice"></button>
       </div>
     </div>
   </div>
-  <script src="/jukebox/assets/JukeboxBot.js"></script>
+  <script src="/jukebox/assets/JukeboxBotInvoice.js"></script>
 </body>
 </html>
 """)
