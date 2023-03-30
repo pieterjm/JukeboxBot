@@ -821,7 +821,8 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                 return
 
             title = "Nothing playing at the moment"
-            if currenttrack:
+            if currenttrack is not None and 'item' in currenttrack and currenttrack['item'] is not None:
+                print(json.dumps(currenttrack))
                 title = spotifyhelper.get_track_title(currenttrack['item'])
 
                 # update history
@@ -830,6 +831,8 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                 newinterval  = ( currenttrack['item']['duration_ms'] - currenttrack['progress_ms'] ) / 1000 + 2
                 if newinterval < interval:
                     interval = newinterval
+            elif currenttrack is not None:
+              logging.info(json.dumps(currenttrack))
 
             # update the title
             if chat_id in now_playing_message:
@@ -1055,7 +1058,7 @@ async def main() -> None:
     application.add_handler(CommandHandler('dj', dj))  # pay another user    
 
     application.add_handler(CallbackQueryHandler(callback_button))
-    application.job_queue.run_repeating(regular_cleanup, 3 * 3600)
+    application.job_queue.run_repeating(regular_cleanup, 12 * 3600)
     application.job_queue.run_once(callback_spotify, 2)
 
 
@@ -1187,16 +1190,16 @@ async def main() -> None:
 
         # create spotify instance
         sp = spotipy.Spotify(auth_manager=auth_manager)
-    
+
         # get the current track
         track = sp.current_user_playing_track()
-        title = "Nothing is playing at the moment"    
-        if track:                    
-            title = spotifyhelper.get_track_title(track['item'])       
+        title = "Nothing is playing at the moment"
+        if track:
+            title = spotifyhelper.get_track_title(track['item'])
         return PlainTextResponse(f'{{"title":"{title}"}}',media_type="application/json")
 
     async def spotify_callback(request: Request) -> PlainTextResponse:
-        """ 
+        """
         This function handles the callback from spotify when authorizing request to an account
 
         A typical request will like like the following

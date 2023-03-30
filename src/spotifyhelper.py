@@ -79,19 +79,19 @@ def get_track_title(item):
     Get a readable version of the track title
     """
     if item is None:
-        return ""
-    
+      return "No track item"
+    if item['artists'] is None:
+      return "No artists"
+    if item['artists'][0] is None:
+      return "No artist"
+    if item['artists'][0]['name'] is None:
+      return "No name"
+    if item['name'] is None:
+      return "No track name"
+
     artist=item['artists'][0]['name']
     track=item['name']
 
-
-    # Rage Against The Machine - Killing in The Name
-
-    # truncate artist to a max of 25 characters
-    max_artist_len = max(25,50 - len(track))
-    if len(artist) > max_artist_len:
-        artist = artist[0:max_artist_len]
-                
     return f"{artist} - {track}"
 
 async def get_price(chat_id):
