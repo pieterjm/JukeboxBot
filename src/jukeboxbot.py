@@ -831,6 +831,8 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                 newinterval  = ( currenttrack['item']['duration_ms'] - currenttrack['progress_ms'] ) / 1000 + 2
                 if newinterval < interval:
                     interval = newinterval
+            elif currenttrack is not None:
+              logging.info(json.dumps(currenttrack))
 
             # update the title
             if chat_id in now_playing_message:
