@@ -807,9 +807,11 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
     interval = 300
     try:
         for key in settings.rds.scan_iter("group:*"):
+            logging.info(f"callback_spotify for group {key}")
             chat_id = key.decode('utf-8').split(':')[1]
             auth_manager = await spotifyhelper.get_auth_manager(chat_id)
             if auth_manager is None:
+                logging.warning("Auth manager is None in callback_spotify")
                 continue
 
             currenttrack = None
@@ -818,8 +820,8 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                 currenttrack = sp.current_user_playing_track()
             except:
                 logging.error("Exception while querying the current playing track at spotify")
-                return
-
+                continue
+            
             title = "Nothing playing at the moment"
             if currenttrack is not None and 'item' in currenttrack and currenttrack['item'] is not None:
                 print(json.dumps(currenttrack))
