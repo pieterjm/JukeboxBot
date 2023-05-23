@@ -10,6 +10,7 @@ A Bitcoin lightning enabled Jukebox for Telegram
 
 ## Ideas for new features
 Priority:
+ - When folks type /queue, and the bot shows the queue, can we differentiate between what is added by plebs and what is the background playlist?
  - Chat embedded on the website (NOSTR maybe?) Endusers can toggle this on or of to be dislplayed in their own videofeed. Preferably should not requre a login but users should be able to set a username or use nostr or twitter login to chat. 
  - Connect the bot to NOSTR. How should that fundionaly work? 
  - Audio players other than spotify
