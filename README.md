@@ -12,6 +12,8 @@ A Bitcoin lightning enabled Jukebox for Telegram
 Priority:
  - When folks type /queue, and the bot shows the queue, can we differentiate between what is added by plebs and what is the background playlist? Maybe by not showing the background playlist at all? idk.
  - Chat embedded on the website (NOSTR maybe?) Endusers can toggle this on or of to be dislplayed in their own videofeed. Preferably should not requre a login but users should be able to set a username or use nostr or twitter login to chat. 
+ - Congestion control #1: limmeting folks to add more tracks if the queue gets to a certain size and they already added 2 tracks in a row.
+ - Congestion control #2: Increase cost per added track per track that is still waiting in the queue
  - Connect the bot to NOSTR. How should that fundionaly work? 
  - Audio players other than spotify
  - Silent disco feature! 3-channels, crowd is the dj!
