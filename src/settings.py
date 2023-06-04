@@ -24,7 +24,9 @@ def init():
     global port
     global max_connections
     global ipaddress
-
+    global bot_id
+    global donation_fee
+    global donation_min
 
     domain=os.environ['JUKEBOX_DOMAIN']
     
@@ -66,7 +68,8 @@ def init():
     bot_token=os.environ['BOT_TOKEN']
     qrcode_path = '/tmp'
     ipaddress = os.environ['BOT_IPADDRESS']
-
+    bot_id=int(os.environ['BOT_ID'])
+    donation_fee = 7  # default donation fee
 
     environment = env
     if env == 'production':    

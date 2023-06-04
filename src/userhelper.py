@@ -141,20 +141,25 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
     
     # no entry in redis, get user and wallet from lnbits 
     if userdata is None:
+        print("no user in redis")
         # maybe it is an existing user
         lnusers = await settings.lnbits.getUsers()
         for lnuser in lnusers:
+            print(lnuser['name'], user.rediskey)
             if lnuser['name'] == user.rediskey:
+                print("Found user")
                 user.lnbitsuserid = lnuser['id']
                 break
 
         # create if not existing
         if user.lnbitsuserid is None:
+            print("lnbitsuserid is None")
             user.lnbitsuserid = await settings.lnbits.createUser(user.rediskey)
 
         # get or create wallet if not existing
         wallet = await settings.lnbits.getWallet(user.lnbitsuserid)
         if wallet is None:
+            print("Creating wallet")
             wallet = await settings.lnbits.createWallet(user.lnbitsuserid,user.rediskey)
 
         # copy parameters
@@ -178,6 +183,8 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
             "webhook_url": f"http://127.0.0.1:7000/jukebox/lnbitscallback?userid={user.userid}"
         }
 
+        print(user.toJson())
+
         if user.username is not None:
             lnuname = user.username.lower()
             lnuname.replace(' ','_')
@@ -189,7 +196,7 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
                 logging.info(f"Username not allowed for lnaddress {lnuname}")
             payload["description"] = f"Fund the Jukebox wallet of @{user.username}"
         else:
-            logging.error(f"username is None for telegram user: {user.id}")
+            logging.error(f"username is None for telegram user: {user.userid}")
             payload['description'] = "Fund your personal Jukebox Wallet"
         
 

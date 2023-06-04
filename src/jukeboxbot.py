@@ -358,9 +358,50 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text="Use /price <sats>. Price is either 0 or 21 or more sats.")        
+    context.job_queue.run_once(delete_message, 5, data={'message':update.message})
+
+# view or set the donation fee
+@debounce
+@adminonly
+async def donate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.job_queue.run_once(delete_message, 5, data={'message':update.message})
+
+    if update.message.chat.type == "private":
+        message = await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=f"Execute the /donate command in the group instead of the private chat.")
+        context.job_queue.run_once(delete_message, 5, data={'message':message})
+        return
+
+    if update.message.text == '/donate':
+        amount = await spotifyhelper.get_donation_fee(update.effective_chat.id)
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Current donation amount is {amount} sats per track.")
+        context.job_queue.run_once(delete_message, 5, data={'message':message})
+        return
+
+    result = re.search("/donate\s+([0-9]+)\s*$",update.message.text)
+    if result is None:
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Use the command as follows: '/donate amount' where amount is the donation amount in sats.")
+        context.job_queue.run_once(delete_message, 5, data={'message':message})
+        return
+
+    amount : int = int(result.groups()[0])
+    if amount < 0:
+        return
+    
+    await spotifyhelper.set_donation_fee(update.message.chat_id, amount)
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"Donation amount set to {amount}")
+    
     context.job_queue.run_once(delete_message, 5, data={'message':message})
 
-
+    
+ 
 # display the play queue
 @debounce
 async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -702,7 +743,7 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"@{sender.username} sent {amount} sats to @{recipient.username}.")
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})        
+        #context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})        
 
         # send a message in the private chat
         if not update.message.reply_to_message.from_user.is_bot:
@@ -738,6 +779,12 @@ async def callback_paid_invoice(invoice: Invoice):
         logging.error("No auth manager after succesfull payment")
         return
     
+    try:
+        logging.info(f"Trying to delete chat_id {invoice.chat_id}, messageid {invoice.message_id}")
+        await application.bot.delete_message(invoice.chat_id,invoice.message_id)            
+    except:
+        pass
+
     # add to the queue and inform others
     sp = spotipy.Spotify(auth_manager=auth_manager)
     spotifyhelper.add_to_queue(sp, invoice.spotify_uri_list)
@@ -750,8 +797,13 @@ async def callback_paid_invoice(invoice: Invoice):
         parse_mode='HTML',
         text=f"You paid {invoice.amount_to_pay} sats for {invoice.title}.")
     
-    # delete the payment request message
-    await application.bot.delete_message(invoice.chat_id,invoice.message_id)
+     # make donation to the bot
+    jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
+    donation_amount : int = await spotifyhelper.get_donation_fee(invoice.chat_id)
+    donation_amount = min(donation_amount,invoice.amount_to_pay)
+    donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
+    result = await invoicehelper.pay_invoice(invoice.recipient, donation_invoice)
+
     return
 
 async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
@@ -824,7 +876,7 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
             
             title = "Nothing playing at the moment"
             if currenttrack is not None and 'item' in currenttrack and currenttrack['item'] is not None:
-                print(json.dumps(currenttrack))
+                #print(json.dumps(currenttrack))
                 title = spotifyhelper.get_track_title(currenttrack['item'])
 
                 # update history
@@ -1006,6 +1058,14 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             chat_id=update.effective_user.id,
             parse_mode='HTML',
             text=f"You paid {amount_to_pay} sats for {invoice_title}.")
+
+        # make donation to the bot
+        jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
+        donation_amount : int = await spotifyhelper.get_donation_fee(update.effective_chat.id)
+        donation_amount = min(donation_amount,invoice.amount_to_pay)
+        donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
+        result = await invoicehelper.pay_invoice(recipient, donation_invoice)
+
         return
 
     # store the invoice in a list of open invoices        
@@ -1048,6 +1108,7 @@ async def main() -> None:
     application.add_handler(CommandHandler(['stack','balance'], balance)) # view wallet balance
     application.add_handler(CommandHandler('couple', connect)) # connect to spotify account
     application.add_handler(CommandHandler('decouple', disconnect)) # disconnect from spotify account
+    application.add_handler(CommandHandler('donate', donate)) # set the donation fee
     application.add_handler(CommandHandler('fund',fund)) # add funds to wallet
     application.add_handler(CommandHandler('history', history)) # view history of tracks
     application.add_handler(CommandHandler('link',link)) # view LNDHUB QR 
