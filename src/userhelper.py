@@ -215,3 +215,21 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
         return user
         
         
+async def get_donation_fee(user: User) -> int:
+    """
+    Gets the donation fee
+    """
+    fee = settings.rds.hget(user.rediskey,"donation_fee")
+
+    if fee is None:
+        fee = settings.donation_fee
+    fee = int(fee)
+    if fee < 0:
+        fee = settings.donation_fee
+    return int(fee)
+
+async def set_donation_fee(user: User, fee: int) -> None:
+    """
+    Sets the donation fee
+    """
+    settings.rds.hset(user.rediskey,"donation_fee",fee)    

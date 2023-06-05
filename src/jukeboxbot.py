@@ -366,15 +366,12 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def donate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.job_queue.run_once(delete_message, 5, data={'message':update.message})
 
-    if update.message.chat.type == "private":
-        message = await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=f"Execute the /donate command in the group instead of the private chat.")
-        context.job_queue.run_once(delete_message, 5, data={'message':message})
+    if update.message.chat.type != "private":
         return
 
+    user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
     if update.message.text == '/donate':
-        amount = await spotifyhelper.get_donation_fee(update.effective_chat.id)
+        amount = await userhelper.get_donation_fee(user)
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"Current donation amount is {amount} sats per track.")
@@ -393,7 +390,7 @@ async def donate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if amount < 0:
         return
     
-    await spotifyhelper.set_donation_fee(update.message.chat_id, amount)
+    await spotifyhelper.set_donation_fee(user, amount)
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=f"Donation amount set to {amount}")
@@ -799,7 +796,7 @@ async def callback_paid_invoice(invoice: Invoice):
     
      # make donation to the bot
     jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
-    donation_amount : int = await spotifyhelper.get_donation_fee(invoice.chat_id)
+    donation_amount : int = await userhelper.get_donation_fee(invoice.user)
     donation_amount = min(donation_amount,invoice.amount_to_pay)
     donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
     result = await invoicehelper.pay_invoice(invoice.recipient, donation_invoice)
@@ -1061,7 +1058,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         # make donation to the bot
         jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
-        donation_amount : int = await spotifyhelper.get_donation_fee(update.effective_chat.id)
+        donation_amount : int = await userhelper.get_donation_fee(invoice.user)
         donation_amount = min(donation_amount,invoice.amount_to_pay)
         donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
         result = await invoicehelper.pay_invoice(recipient, donation_invoice)
