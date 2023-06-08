@@ -14,6 +14,7 @@ import random
 import string
 import telegramhelper
 from telegramhelper import TelegramCommand
+import statshelper
 
 #TODO: 
 # get or create user lijkt nog niet altijd goed te gaan
@@ -150,6 +151,33 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # only create a callback to delete the message when not in a private chat
     if update.message.chat.type != "private":
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
+
+# display stats
+@debounce
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    userid: int = update.effective_user.id
+
+    if update.message.chat.type != "private":
+        return
+
+    if userid not in settings.superadmins:
+        logging.info(f"User {userid} is not a superadmin. Access to stats denied")
+        return
+    
+    results = await statshelper.get_jukebox_groups()
+    balance = await statshelper.get_bot_stack()
+
+    statsText = f"Bot balance: {balance} sats \n"
+
+    statsText += f"Number of groups: {results['numgroups']}. List of owners: \n"
+    for group in results['group']:
+        statsText += f" - @{group['owner'].username}\n"
+
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=statsText)
+    
+
 
 # get the current balance
 @debounce
@@ -1114,6 +1142,7 @@ async def main() -> None:
     application.add_handler(CommandHandler('queue', queue)) # view the queue
     application.add_handler(CommandHandler("setclientsecret",spotify_settings)) # set the secret for a spotify app
     application.add_handler(CommandHandler("setclientid",spotify_settings))  # set the clientid or a spotify app
+    application.add_handler(CommandHandler("stats",stats)) # dump various stats
     application.add_handler(CommandHandler(["start","faq"],start))  # help message
     application.add_handler(CommandHandler('dj', dj))  # pay another user    
 

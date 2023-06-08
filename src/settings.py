@@ -26,7 +26,7 @@ def init():
     global ipaddress
     global bot_id
     global donation_fee
-    global donation_min
+    global superadmins
 
     domain=os.environ['JUKEBOX_DOMAIN']
     
@@ -70,6 +70,7 @@ def init():
     ipaddress = os.environ['BOT_IPADDRESS']
     bot_id=int(os.environ['BOT_ID'])
     donation_fee = 7  # default donation fee
+    superadmins = [int(superadmin) for superadmin in os.environ['SUPERADMINS'].split(',')]
 
     environment = env
     if env == 'production':    
