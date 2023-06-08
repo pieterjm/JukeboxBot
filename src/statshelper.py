@@ -29,10 +29,12 @@ async def get_jukebox_groups() -> dict:
 
         result['numgroups'] += 1
 
-        owner = await userhelper.get_group_owner(chatid)
-        result["group"].append({
-            "owner": owner
-        })
-
+        try:
+	        owner = await userhelper.get_group_owner(chatid)
+        	result["group"].append({
+            	        "owner": owner
+        	})
+        except:
+                logging.error("problem getting group stats")
 
     return result
