@@ -682,12 +682,22 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         # start a job to kill the message  after 30 seconds if not used
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_long, data={'message':message})
-    
         return
-        
+
     # search for tracks
-    result = sp.search(searchstr)
-    
+    numtries: int = 3
+    while numtries > 0:
+        try:
+            result = sp.search(searchstr)
+        except spotipy.exceptions.SpotifyException:
+            numtries -= 1
+            if numtries == 0:
+                logging.error("Spotify returned and exception, not returning search result")
+                return
+            logging.warning("Spotify returned and exception, retrying")
+            continue
+        break
+
     # create a list of max five buttons, each with a unique song title
     if len(result['tracks']['items']) > 0:
         tracktitles  = {}
@@ -925,9 +935,12 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                         pass
             else:
                 logging.info("Creating new pinned message")
-                message = await context.bot.send_message(text=title,chat_id=chat_id)
-                await context.bot.pin_chat_message(chat_id=chat_id, message_id=message.id)
-                now_playing_message[chat_id] = [ message.id, title ]
+                try:
+                    message = await context.bot.send_message(text=title,chat_id=chat_id)
+                    await context.bot.pin_chat_message(chat_id=chat_id, message_id=message.id)
+                    now_playing_message[chat_id] = [ message.id, title ]
+                except:
+                    logging.error("Exception when sending message to group")
     finally:
         if interval < 1 or interval > 300:
             interval = 60
