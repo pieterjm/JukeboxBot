@@ -46,7 +46,7 @@ class CacheJukeboxHandler(CacheHandler):
         self.token = None
 
     def get_cached_token(self):
-        logging.info("Obtain cached token")
+        logging.debug("Obtain cached token")
         token_info = None
     
         try:
@@ -112,7 +112,7 @@ async def set_price(chat_id, price):
     price = settings.rds.hset(rediskey,"price",price)
 
 async def create_auth_manager(chat_id, client_id, client_secret):
-    logging.info("create auth manager")
+    logging.debug("create auth manager")
     cache_handler = CacheJukeboxHandler(chat_id)
     return SpotifyOAuth(
         scope='user-read-currently-playing,user-modify-playback-state,user-read-playback-state',
@@ -142,7 +142,7 @@ async def get_auth_manager(chat_id):
     """
     Create a spotify auth manager for a specific group
     """
-    logging.info("Get Auth Manager")
+    logging.debug("Get Auth Manager")
     am_data = settings.rds.hget(f"group:{chat_id}","authmanager")
     if am_data is None:
         return None

@@ -927,11 +927,12 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
             if chat_id in now_playing_message:
                 [message_id, prev_title] = now_playing_message[chat_id]
                 if prev_title != title:
-                    try:            
+                    try:
                         await context.bot.editMessageText(title,chat_id=chat_id,message_id=message_id)
                         now_playing_message[chat_id] = [ message_id, title ]
+                        logging.info(f"Now playing {title} in chat {chat_id}")
                     except:
-                        logging.info("Exception when refreshing now playing")
+                        logging.error("Exception when refreshing now playing")
                         pass
             else:
                 logging.info("Creating new pinned message")
