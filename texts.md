@@ -50,10 +50,8 @@ refund - Withdraw sats from your personal wallet
 4. /decouple 
     - Replace /disconnect with /decouple to preveet command colissions with other bots. 
     - Admins use this command to decouple their player to their Telegram group.
-5. /setgift (on)
-    - Gifts 7 of the 21 sats to the botmainers at each jukebox /add 
-6. /setgift (off)
-    - Disables the donation
+5. /donaete 0
+    - Disables donations to bot maintainers. Standard is 7. Please increase if you wish to help upkeep and development of this bot
     
 ## Jukeboxtexts.py edit suggestions
 
