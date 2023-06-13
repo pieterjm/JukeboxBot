@@ -171,7 +171,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     statsText += f"Number of groups: {results['numgroups']}. List of owners: \n"
     for group in results['group']:
-        statsText += f" - @{group['owner'].username}\n"
+        statsText += f" - {group['groupid']} : @{group['owner'].username}\n"
 
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -823,14 +823,22 @@ async def callback_paid_invoice(invoice: Invoice):
     # add to the queue and inform others
     sp = spotipy.Spotify(auth_manager=auth_manager)
     spotifyhelper.add_to_queue(sp, invoice.spotify_uri_list)
-    await application.bot.send_message(
-        chat_id=invoice.chat_id,
-        parse_mode='HTML',
-        text=f"'{invoice.title}' was added to the queue.")
-    await application.bot.send_message(
-        chat_id=invoice.user.userid,
-        parse_mode='HTML',
-        text=f"You paid {invoice.amount_to_pay} sats for {invoice.title}.")
+    try:
+        await application.bot.send_message(
+            chat_id=invoice.chat_id,
+            parse_mode='HTML',
+            text=f"'{invoice.title}' was added to the queue.")
+    except:
+        logging.error("Could not  send message to the group that track was added to the queue")
+
+    if False:
+        try:
+            await application.bot.send_message(
+                chat_id=invoice.user.userid,
+                parse_mode='HTML',
+                text=f"You paid {invoice.amount_to_pay} sats for {invoice.title}.")
+        except:
+            logging.info("Could not send individual message to user that")
     
      # make donation to the bot
     jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)

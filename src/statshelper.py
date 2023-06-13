@@ -32,6 +32,7 @@ async def get_jukebox_groups() -> dict:
         try:
 	        owner = await userhelper.get_group_owner(chatid)
         	result["group"].append({
+                        "groupid": chatid,
             	        "owner": owner
         	})
         except:
