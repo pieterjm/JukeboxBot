@@ -245,7 +245,7 @@ async def disconnect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 # Connect a spotify player to the bot, the connect command
 @debounce
-@adminonly
+#@adminonly
 async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # get spotify settings for the user
     sps = await spotifyhelper.get_spotify_settings(update.effective_user.id)    
@@ -782,16 +782,22 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         # send a message in the private chat
         if not update.message.reply_to_message.from_user.is_bot:
-            message = await context.bot.send_message(
-                chat_id=recipient.userid,
-                text=f"Received {amount} sats from @{sender.username}.")
+            try:
+                message = await context.bot.send_message(
+                    chat_id=recipient.userid,
+                    text=f"Received {amount} sats from @{sender.username}.")
+            except:
+                logging.info("Could not send message to user, probably not allowed")
         else:
             logging.info(f"@{sender.username} is sending {amount} sats to the bot")
 
         # send a message in the private chat
-        message = await context.bot.send_message(
-            chat_id=sender.userid,
-            text=f"Sent {amount} sats to  @{recipient.username}.")
+        try:
+            message = await context.bot.send_message(
+                chat_id=sender.userid,
+                text=f"Sent {amount} sats to  @{recipient.username}.")
+        except:
+            logging.info("Could not send message to sender user, probably not allowed")
 
         logging.info(f"User {sender.userid} sent {amount} sats to {recipient.userid}")
     else:
@@ -917,7 +923,7 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                 logging.error("Exception while querying the current playing track at spotify")
                 continue
             
-            title = "Nothing playing at the moment"
+            title = ""
             if currenttrack is not None and 'item' in currenttrack and currenttrack['item'] is not None:
                 #print(json.dumps(currenttrack))
                 title = spotifyhelper.get_track_title(currenttrack['item'])
@@ -932,6 +938,9 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
               logging.info(json.dumps(currenttrack))
 
             # update the title
+            if len(title) == 0:
+                continue
+            
             if chat_id in now_playing_message:
                 [message_id, prev_title] = now_playing_message[chat_id]
                 if prev_title != title:
