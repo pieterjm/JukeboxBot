@@ -1,0 +1,15 @@
+{
+    "featured": ["lnurldevice"],
+    "extensions": [
+	{
+	    "id": "lnurldevice",
+	    "repo": "https://github.com/pieterjm/lnurldevice",
+	    "name": "LNURLDevices",
+	    "version": "0.4-connect-float-sat",
+	    "short_description": "Points of sale, ATMs, switches",
+	    "icon": "https://raw.githubusercontent.com/lnbits/lnurldevice/main/static/image/lnurldevice.png",
+	    "archive": "https://github.com/pieterjm/lnurldevice/archive/refs/tags/0.4-connect-float-sat.zip",
+	    "hash": "97c3bfa6dee65fe5c940662947af1c2eda0093c558bf2eff4f27481a857b62f8"	    
+	}
+    ]
+}
