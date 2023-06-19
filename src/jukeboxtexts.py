@@ -19,6 +19,8 @@ You can also chat in private with me to do stuff like viewing your balance.
 
 The /couple, /decouple, /setclientid and /setclientsecret are commands to connect your own music player to this bot and start your own Jukebox!
 
+/price (only available for the owner of the chat) allows you to view or modify the current track price. This command also allows to set a donation per track. 
+
 If you like this bot, send a donation to herovk@ln.tips or simply /dj the bot.
 """           
 

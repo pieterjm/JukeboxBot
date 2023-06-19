@@ -359,74 +359,41 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     price = await spotifyhelper.get_price(update.effective_chat.id)
+    donation_amount = await spotifyhelper.get_donation_fee(update.effective_chat.id)
 
     if update.message.text == '/price':
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
-            text=f"Current track price is {price}")
+            text=f"Current track price is {price} sats. Per request track {donation_amount} is sent to the Jukebox Bot.")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
         return
 
-    newprice = update.message.text.split(' ',1)
-    if len(newprice) > 1:
-        newprice = newprice[1]
-        if newprice.isdigit():
-            newprice = int(newprice)
-            if newprice == 0 or newprice >= 21:
-                price = newprice
-
-                await spotifyhelper.set_price(update.effective_chat.id, price)
-
-                message = await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=f"Updating price to {price} sats.")
-                return
-    
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="Use /price <sats>. Price is either 0 or 21 or more sats.")        
-    context.job_queue.run_once(delete_message, 5, data={'message':update.message})
-
-# view or set the donation fee
-@debounce
-@adminonly
-async def donate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    context.job_queue.run_once(delete_message, 5, data={'message':update.message})
-
-    if update.message.chat.type != "private":
-        return
-
-    user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
-    if update.message.text == '/donate':
-        amount = await userhelper.get_donation_fee(user)
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"Current donation amount is {amount} sats per track.")
-        context.job_queue.run_once(delete_message, 5, data={'message':message})
-        return
-
-    result = re.search("/donate\s+([0-9]+)\s*$",update.message.text)
+    # parse and validate the price command
+    result = re.search("/price\s+([0-9]+)\s+([0-9]+)$",update.message.text)
     if result is None:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=f"Use the command as follows: '/donate amount' where amount is the donation amount in sats.")
-        context.job_queue.run_once(delete_message, 5, data={'message':message})
-        return
+            text=f"Use command as follows: /price <price> <donation>\n<price> is the track price in sats\n<donation> is the amount donated to the bot per reqested track. The donation is substracted from the track price.")
+        return        
 
-    amount : int = int(result.groups()[0])
-    if amount < 0:
-        return
-    
-    await spotifyhelper.set_donation_fee(user, amount)
+    newprice = int(result.groups()[0])
+    newdonation = int(result.groups()[1])
+
+    # modify  that price is less or equal compared to donation amount
+    if newdonation > newprice:
+        newdonation = newprice
+
+    # update 
+    await spotifyhelper.set_price(update.effective_chat.id, newprice)
+    await spotifyhelper.set_donation_fee(update.effective_chat.id, newdonation)
+
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"Donation amount set to {amount}")
+        text=f"Updating price to {newprice} sats. Donation amount is {newdonation} sats.")
     
-    context.job_queue.run_once(delete_message, 5, data={'message':message})
+    context.job_queue.run_once(delete_message, 5, data={'message':update.message})
 
-    
- 
 # display the play queue
 @debounce
 async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -572,9 +539,7 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # create a message tyo do this in a private chat
     if update.message.chat.type != "private":
-        bot_me = await context.bot.get_me()
-        print(f"https://t.me/{bot_me.username}")
-    
+        bot_me = await context.bot.get_me()    
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text="Like keeping your mnenomic seedphrase offline, it is better to request your lndhub link in a private chat with me.",
@@ -837,22 +802,14 @@ async def callback_paid_invoice(invoice: Invoice):
     except:
         logging.error("Could not  send message to the group that track was added to the queue")
 
-    if False:
-        try:
-            await application.bot.send_message(
-                chat_id=invoice.user.userid,
-                parse_mode='HTML',
-                text=f"You paid {invoice.amount_to_pay} sats for {invoice.title}.")
-        except:
-            logging.info("Could not send individual message to user that")
-    
-     # make donation to the bot
-    jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
-    donation_amount : int = await userhelper.get_donation_fee(invoice.user)
-    donation_amount = min(donation_amount,invoice.amount_to_pay)
-    donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
-    result = await invoicehelper.pay_invoice(invoice.recipient, donation_invoice)
-
+    # make donation to the bot
+    if settings.donate:
+        jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
+        donation_amount : int = await spotifyhelper.get_donation_fee(invoice.chat_id)
+        donation_amount = min(donation_amount,invoice.amount_to_pay)
+        donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
+        result = await invoicehelper.pay_invoice(invoice.recipient, donation_invoice)
+        
     return
 
 async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
@@ -925,7 +882,6 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
             
             title = ""
             if currenttrack is not None and 'item' in currenttrack and currenttrack['item'] is not None:
-                #print(json.dumps(currenttrack))
                 title = spotifyhelper.get_track_title(currenttrack['item'])
 
                 # update history
@@ -1094,7 +1050,8 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
     invoice.user = user
     invoice.title = invoice_title
-    invoice.recipient = recipient    
+    invoice.recipient = recipient   
+    logging.info("recipient when creating invoice: " + recipient.toJson())
     invoice.spotify_uri_list = spotify_uri_list
     invoice.title = invoice_title
     invoice.chat_id = update.effective_chat.id
@@ -1110,17 +1067,24 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
             text=f"@{update.effective_user.username} added {invoice_title} to the queue.")
-        await context.bot.send_message(
-            chat_id=update.effective_user.id,
-            parse_mode='HTML',
-            text=f"You paid {amount_to_pay} sats for {invoice_title}.")
 
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                parse_mode='HTML',
+                text=f"You paid {amount_to_pay} sats for {invoice_title}.")
+        except:
+            pass
+        
         # make donation to the bot
-        jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
-        donation_amount : int = await userhelper.get_donation_fee(invoice.user)
-        donation_amount = min(donation_amount,invoice.amount_to_pay)
-        donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
-        result = await invoicehelper.pay_invoice(recipient, donation_invoice)
+        if settings.donate:
+            jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
+            donation_amount : int = await spotifyhelper.get_donation_fee(invoice.chat_id)
+            donation_amount = min(donation_amount,invoice.amount_to_pay)
+            logging.info("Jukebox bot" + jukeboxbot.toJson()) 
+            logging.info("Donation amount" + str(donation_amount))           
+            donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
+            result = await invoicehelper.pay_invoice(recipient, donation_invoice)
 
         return
 
@@ -1164,7 +1128,6 @@ async def main() -> None:
     application.add_handler(CommandHandler(['stack','balance'], balance)) # view wallet balance
     application.add_handler(CommandHandler('couple', connect)) # connect to spotify account
     application.add_handler(CommandHandler('decouple', disconnect)) # disconnect from spotify account
-    application.add_handler(CommandHandler('donate', donate)) # set the donation fee
     application.add_handler(CommandHandler('fund',fund)) # add funds to wallet
     application.add_handler(CommandHandler('history', history)) # view history of tracks
     application.add_handler(CommandHandler('link',link)) # view LNDHUB QR 
@@ -1212,6 +1175,7 @@ async def main() -> None:
             return Response()
         
         # process in the bot
+        logging.info("Invoice in HTTP callback: " + invoice.toJson())
         await callback_paid_invoice(invoice)
             
         return Response()
@@ -1270,7 +1234,6 @@ async def main() -> None:
         if invoice is None:
             return Response("Invoice not found")
 
-        print(invoice.toJson())
         return Response(f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -1328,8 +1291,6 @@ async def main() -> None:
         """
 
         logging.info("Got callback from spotify")
-        print("Got callback from spotify")
-        print(request.url)
 
         if 'code' not in request.query_params:
             # callback without code
@@ -1357,7 +1318,6 @@ async def main() -> None:
         try:
             auth_manager = await spotifyhelper.get_auth_manager(chatid)                               
             if auth_manager is not None:
-                print(auth_manager.get_access_token(code))     
                 await userhelper.set_group_owner(chatid, userid)
                 await application.bot.send_message(
                     chat_id=userid,

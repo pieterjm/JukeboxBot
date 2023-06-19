@@ -29,14 +29,8 @@ class Invoice:
             'payment_hash':self.payment_hash,
             'payment_request':self.payment_request,
             'amount_to_pay': self.amount_to_pay,
-            'recipient': {
-                'userid': self.recipient.userid,
-                'username': self.recipient.username
-            },
-            'user': {
-                'userid': self.user.userid,
-                'username': self.user.username
-            },
+            'recipient': self.recipient.toJson(),
+            'user': self.user.toJson(),
             'spotify_uri_list': self.spotify_uri_list,
             'title': self.title,
             'chat_id': self.chat_id,
@@ -56,10 +50,14 @@ class Invoice:
         else:
             self.payment_request = data['payment_request']
 
-        udata = data['recipient']
-        self.recipient = User(udata['userid'],udata['username'])
+        udata = data['recipient']        
+        udata = json.loads(udata)
+        self.recipient = User(udata['telegram_userid'])
+        self.recipient.loadJson(data['recipient'])
         udata = data['user']
-        self.user = User(udata['userid'],udata['username'])
+        udata = json.loads(udata)
+        self.user = User(udata['telegram_userid'])
+        self.user.loadJson(data['user'])
         
         self.amount_to_pay = data['amount_to_pay']
         self.spotify_uri_list = data['spotify_uri_list']
@@ -69,6 +67,10 @@ class Invoice:
 
 # Get/Create a QR code and store in filename
 async def create_invoice(user: User, amount: int, memo: str) -> Invoice:
+    assert(user is not None)
+    assert(user.invoicekey is not None)
+    assert(amount is not None)
+    assert(memo is not None)
     lnbits_invoice = await settings.lnbits.createInvoice(user.invoicekey,amount,memo, None)
     invoice = Invoice(lnbits_invoice['payment_hash'],lnbits_invoice['payment_request'])
     return invoice
@@ -77,6 +79,8 @@ async def create_invoice(user: User, amount: int, memo: str) -> Invoice:
 async def pay_invoice(user: User, invoice: Invoice):
     assert(user is not None)
     assert(invoice is not None)
+    assert(invoice.payment_request is not None)
+    assert(user.adminkey is not None)
     result = await settings.lnbits.payInvoice(invoice.payment_request,user.adminkey)
 
     if result['result'] == True:
@@ -103,6 +107,10 @@ async def delete_invoice(payment_hash: str) -> bool:
     return True
     
 async def invoice_paid(invoice: Invoice) -> bool:
+    assert(invoice is not None)
+    assert(invoice.recipient is not None)
+    assert(invoice.recipient.invoicekey is not None)
+    assert(invoice.payment_hash is not None)
     result = await settings.lnbits.checkInvoice(invoice.recipient.invoicekey,invoice.payment_hash)
     if result == True:
         await delete_invoice(invoice.payment_hash)
@@ -122,6 +130,5 @@ async def get_invoice(payment_hash: str) -> Invoice:
 
     invoice = Invoice(payment_hash, None)
     invoice.loadJson(data)
-    print(invoice)
     return invoice
 

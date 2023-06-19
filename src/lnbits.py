@@ -1,6 +1,7 @@
 import json
 import httpx
 import logging
+from httpx import ReadTimeout
 
 class LNbits:
     def __init__(self, protocol, host, admin_adminkey, admin_invoicekey, admin_usrkey):
@@ -10,7 +11,7 @@ class LNbits:
         self._admin_invoicekey = admin_invoicekey
         self._admin_usrkey = admin_usrkey
 
-    # get balance
+    # get 
     async def getBalance(self, invoicekey):
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -36,7 +37,6 @@ class LNbits:
                 elif result['detail'].startswith('(sqlite3.IntegrityError) UNIQUE constraint failed'):
                     result['detail'] = 'Duplicate invoice, payment failed.'
                 else:    
-                    logging.info(result)
                     result['detail'] = 'Payment failed.'
 
 
@@ -52,14 +52,27 @@ class LNbits:
         }
         if extra is not None:
             payload['extra'] = extra
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.protocol}://{self.host}/api/v1/payments",
-                headers={'X-Api-Key':invoicekey},
-                json=payload)
-        
-            return json.loads(response.text)
+
+
+        async with httpx.AsyncClient() as client:            
+            numtries = 3
+            while numtries > 0:
+                try:
+                    response = await client.post(
+                        f"{self.protocol}://{self.host}/api/v1/payments",
+                        headers={'X-Api-Key':invoicekey},
+                        json=payload)
+
+                    return json.loads(response.text)
+                except ReadTimeout:
+                    numtries -= 1
+                    logging.error("Read timeout error. Retrying another time")
+                except Exception as ex:
+                    template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+                    message = template.format(type(ex).__name__, ex.args)
+                    logging.error(message)
+                    raise
+
 
     # create a user and initial wallet
     async def createUser(self, name):
@@ -84,7 +97,7 @@ class LNbits:
                          
     # create a wallet for a user
     async def createWallet(self, lnbitsuserid, name):
-        print("We should not come in the function createWallet")
+        logging.error("Unreachable code in createWallet accessed. A wallet should be created when a user is created. This could mean the the wallet is deleted, and not te user")
         return None
         
         async with httpx.AsyncClient() as client:
@@ -126,7 +139,7 @@ class LNbits:
 
         # delete all paylinks
         for paylink in paylinks:
-            logging.info(f"Deleting old paylink with id {paylink['id']}")
+            logging.debug(f"Deleting old paylink with id {paylink['id']}")
             async with httpx.AsyncClient() as client:
                 response = await client.delete(
                     f"{self.protocol}://{self.host}/lnurlp/api/v1/links/{paylink['id']}",
@@ -166,13 +179,20 @@ class LNbits:
     # check wether an invoice has been paid. Returns True if paid. Otherwise False
     async def checkInvoice(self,invoicekey,payment_hash):
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.protocol}://{self.host}/api/v1/payments/{payment_hash}",
-                headers = {"X-Api-Key": invoicekey})
+            try:
+                response = await client.get(
+                    f"{self.protocol}://{self.host}/api/v1/payments/{payment_hash}",
+                    headers = {"X-Api-Key": invoicekey})
             
-            jsobj = json.loads(response.text)
-            if jsobj['paid'] == True:
-                return True
+                jsobj = json.loads(response.text)
+                if jsobj['paid'] == True:
+                    return True                    
+            except Exception as ex:
+                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+                message = template.format(type(ex).__name__, ex.args)
+                logging.error(message)
+                return False
+
         return False
 
 

@@ -89,7 +89,12 @@ async def get_group_owner(chat_id: int) -> User:
     
     userid = data.decode('utf-8')
 
-    return await get_or_create_user(userid)    
+    user = await get_or_create_user(userid)    
+
+    assert(user is not None)
+    logging.debug("get_group_owner " + user.toJson())
+
+    return user
 
   
 async def delete_group_owner(chat_id: int) -> None:
@@ -129,7 +134,7 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
     if userdata is not None:
         try:
             user.loadJson(userdata)
-            logging.info("Got the fast path for retrieving the user")
+            logging.debug("Got the fast path for retrieving the user")
             return user
         except AssertionError:
             if userdata == b'null':
@@ -141,25 +146,20 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
     
     # no entry in redis, get user and wallet from lnbits 
     if userdata is None:
-        print("no user in redis")
         # maybe it is an existing user
         lnusers = await settings.lnbits.getUsers()
         for lnuser in lnusers:
-            print(lnuser['name'], user.rediskey)
             if lnuser['name'] == user.rediskey:
-                print("Found user")
                 user.lnbitsuserid = lnuser['id']
                 break
 
         # create if not existing
         if user.lnbitsuserid is None:
-            print("lnbitsuserid is None")
             user.lnbitsuserid = await settings.lnbits.createUser(user.rediskey)
 
         # get or create wallet if not existing
         wallet = await settings.lnbits.getWallet(user.lnbitsuserid)
         if wallet is None:
-            print("Creating wallet")
             wallet = await settings.lnbits.createWallet(user.lnbitsuserid,user.rediskey)
 
         # copy parameters
@@ -183,7 +183,6 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
             "webhook_url": f"http://127.0.0.1:7000/jukebox/lnbitscallback?userid={user.userid}"
         }
 
-        print(user.toJson())
 
         if user.username is not None:
             lnuname = user.username.lower()
@@ -193,7 +192,7 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
             if re.search('^[a-z0-9\-_\.]+$',lnuname): 
                 payload['username'] = lnuname
             else:
-                logging.info(f"Username not allowed for lnaddress {lnuname}")
+                logging.debug(f"Username not allowed for lnaddress {lnuname}")
             payload["description"] = f"Fund the Jukebox wallet of @{user.username}"
         else:
             logging.error(f"username is None for telegram user: {user.userid}")
@@ -214,22 +213,3 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
         
         return user
         
-        
-async def get_donation_fee(user: User) -> int:
-    """
-    Gets the donation fee
-    """
-    fee = settings.rds.hget(user.rediskey,"donation_fee")
-
-    if fee is None:
-        fee = settings.donation_fee
-    fee = int(fee)
-    if fee < 0:
-        fee = settings.donation_fee
-    return int(fee)
-
-async def set_donation_fee(user: User, fee: int) -> None:
-    """
-    Sets the donation fee
-    """
-    settings.rds.hset(user.rediskey,"donation_fee",fee)    
