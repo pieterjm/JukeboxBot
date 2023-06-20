@@ -78,7 +78,8 @@ def init():
     if env == 'production':    
         logging.basicConfig(
             filename="logfile_{time}.dat".format(time=time()),
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            format="[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s",
+            #format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             level=logging.INFO
         )
         return True

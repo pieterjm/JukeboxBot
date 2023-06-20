@@ -72,6 +72,8 @@ class LNbits:
                     message = template.format(type(ex).__name__, ex.args)
                     logging.error(message)
                     raise
+        
+        return None
 
 
     # create a user and initial wallet

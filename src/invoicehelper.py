@@ -72,15 +72,39 @@ async def create_invoice(user: User, amount: int, memo: str) -> Invoice:
     assert(amount is not None)
     assert(memo is not None)
     lnbits_invoice = await settings.lnbits.createInvoice(user.invoicekey,amount,memo, None)
+    if lnbits_invoice is None:
+        return None
+
     invoice = Invoice(lnbits_invoice['payment_hash'],lnbits_invoice['payment_request'])
     return invoice
 
 
 async def pay_invoice(user: User, invoice: Invoice):
-    assert(user is not None)
-    assert(invoice is not None)
-    assert(invoice.payment_request is not None)
-    assert(user.adminkey is not None)
+
+    if user is None:
+        return {
+            'result': False,
+            'detail': "User is None"
+        }
+
+    if user.adminkey is None:
+        return {
+            'result': False,
+            'detail': "Adminkey is None"
+        }
+
+    if invoice is None:
+        return {
+            'result': False,
+            'detail': "Invoice is None"
+        }
+
+    if invoice.payment_request is None:
+        return {
+            'result': False,
+            'detail': "Payment_request is None"
+        }
+
     result = await settings.lnbits.payInvoice(invoice.payment_request,user.adminkey)
 
     if result['result'] == True:
