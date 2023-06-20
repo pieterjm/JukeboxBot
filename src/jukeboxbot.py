@@ -370,6 +370,7 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
         return
 
+
     # parse and validate the price command
     result = re.search("/price\s+([0-9]+)\s+([0-9]+)$",update.message.text)
     if result is None:

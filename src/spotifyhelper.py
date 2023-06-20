@@ -80,7 +80,7 @@ def get_track_title(item):
     """
     if item is None:
       return "No track item"
-    if item['artists'] is None:
+    if not 'artists' in item:
       return "No artists"
     if item['artists'][0] is None:
       return "No artist"
