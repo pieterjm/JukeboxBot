@@ -78,21 +78,25 @@ def get_track_title(item):
     """
     Get a readable version of the track title
     """
+    track = ""
+    artist = ""
+
     if item is None:
-      return "No track item"
-    if not 'artists' in item:
-      return "No artists"
-    if item['artists'][0] is None:
-      return "No artist"
-    if item['artists'][0]['name'] is None:
-      return "No name"
-    if item['name'] is None:
-      return "No track name"
+      return "Null item"
+    if 'name' in item:
+        track = item['name']
+    if 'artists' in item:
+        if item['artists'][0] is not None:
+            if item['artists'][0]['name'] is None:
+                artist=item['artists'][0]['name']
 
-    artist=item['artists'][0]['name']
-    track=item['name']
-
-    return f"{artist} - {track}"
+    if len(track) > 0 and len(artist) > 0:
+        return f"{artist} - {track}"
+    if len(track) == 0 and len(artist) > 0:
+        return artist
+    if len(track) > 0 and len(artist) == 0:
+        return track
+    return "Empty"
 
 async def get_price(chat_id):
     """
