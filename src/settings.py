@@ -56,7 +56,7 @@ def init():
     port = 7000
     
     price = 21
-    fund_max = 100 * price
+    fund_max = 21000
     fund_min = price
     rds = redis.Redis(db=2)
     lnbits = LNbits(
@@ -69,7 +69,7 @@ def init():
     qrcode_path = '/tmp'
     ipaddress = os.environ['BOT_IPADDRESS']
     bot_id=int(os.environ['BOT_ID'])
-    donation_fee = 7  # default donation fee
+    donation_fee = 21  # default donation fee
     superadmins = [int(superadmin) for superadmin in os.environ['SUPERADMINS'].split(',')]
 
     environment = env
