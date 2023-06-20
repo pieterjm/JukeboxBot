@@ -388,45 +388,6 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text="Use /price <sats>. Price is either 0 or 21 or more sats.")        
     context.job_queue.run_once(delete_message, 5, data={'message':update.message})
 
-# view or set the donation fee
-@debounce
-@adminonly
-async def donate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    context.job_queue.run_once(delete_message, 5, data={'message':update.message})
-
-    if update.message.chat.type != "private":
-        return
-
-    user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
-    if update.message.text == '/donate':
-        amount = await userhelper.get_donation_fee(user)
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"Current donation amount is {amount} sats per track.")
-        context.job_queue.run_once(delete_message, 5, data={'message':message})
-        return
-
-    result = re.search("/donate\s+([0-9]+)\s*$",update.message.text)
-    if result is None:
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"Use the command as follows: '/donate amount' where amount is the donation amount in sats.")
-        context.job_queue.run_once(delete_message, 5, data={'message':message})
-        return
-
-    amount : int = int(result.groups()[0])
-    if amount < 0:
-        return
-    
-    await spotifyhelper.set_donation_fee(user, amount)
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"Donation amount set to {amount}")
-    
-    context.job_queue.run_once(delete_message, 5, data={'message':message})
-
-    
- 
 # display the play queue
 @debounce
 async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1164,7 +1125,6 @@ async def main() -> None:
     application.add_handler(CommandHandler(['stack','balance'], balance)) # view wallet balance
     application.add_handler(CommandHandler('couple', connect)) # connect to spotify account
     application.add_handler(CommandHandler('decouple', disconnect)) # disconnect from spotify account
-    application.add_handler(CommandHandler('donate', donate)) # set the donation fee
     application.add_handler(CommandHandler('fund',fund)) # add funds to wallet
     application.add_handler(CommandHandler('history', history)) # view history of tracks
     application.add_handler(CommandHandler('link',link)) # view LNDHUB QR 
