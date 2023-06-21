@@ -33,7 +33,9 @@ A Bitcoin lightning enabled Jukebox for Telegram
  - Liedjes faucet, ik gooi geld in de jukebox, maar jullie mogen de muziek uitzoeken. /faucet, when there is money left, /add payment comes from faucet 
 
 ## Problems
-  - /fund limit is to low at 2100
+  - /fund limit is too low at 2100
+  - Multiple uses of the /fund command does not result in updated /stack balance
+  - /fund LNURL end destination is no longer Easycoat but @LightningTipBot
   - /donate gives no feedback after setting /donate ammount or /donate (without amount)
   - /stack command result looks like it is not updating after /fund command, but does udpate after /dj command or when funds are subtracted
   - /stats bot balance seems to only update in 21 sat increments for all groups, even though some groups have higher or lower /donate ammount set. Example, B7 gropu has /price 2100 and /donate 400, however, after /add track, Tommy receives 2079 and the bot 21 sat while Noderunners FM has /donate 7 set but bot balance still updates with 21. 
