@@ -34,9 +34,9 @@ A Bitcoin lightning enabled Jukebox for Telegram
 
 ## Problems
   - /fund limit is to low at 2100
-  - /donate gives no feedback after setting /donate ammount
-  - /stack command result looks like it is not updating when funds are added. However does update when funds are subtracted
-  - /stats bot amount seems to only update in 21 increments, even though some groups have higher /donate ammount set. Example, B7 gropu has /price 2100 and /donate 400, however, after /add track, Tommy receives 2079 and the bot 21 sats
+  - /donate gives no feedback after setting /donate ammount or /donate (without amount)
+  - /stack command result looks like it is not updating after /fund command, but does udpate after /dj command or when funds are subtracted
+  - /stats bot balance seems to only update in 21 sat increments for all groups, even though some groups have higher or lower /donate ammount set. Example, B7 gropu has /price 2100 and /donate 400, however, after /add track, Tommy receives 2079 and the bot 21 sat while Noderunners FM has /donate 7 set but bot balance still updates with 21. 
   - When the player is not available, the bot keeps sending messages that the player is not available, removed for now  
   - Let updates of the price message stay, or add it to the current playing track message (including description of the most important commands). Maybe the price command should be removed at all. Variable price appears as confusing
   
