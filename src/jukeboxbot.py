@@ -884,7 +884,7 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                 logging.error("Exception while querying the current playing track at spotify")
                 continue
             
-            title = ""
+            title = "Nothing playing at the moment"
             if currenttrack is not None and 'item' in currenttrack and currenttrack['item'] is not None:
                 #print(json.dumps(currenttrack))
                 title = spotifyhelper.get_track_title(currenttrack['item'])
@@ -899,9 +899,6 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
               logging.info(json.dumps(currenttrack))
 
             # update the title
-            if len(title) == 0:
-                continue
-            
             if chat_id in now_playing_message:
                 [message_id, prev_title] = now_playing_message[chat_id]
                 if prev_title != title:
