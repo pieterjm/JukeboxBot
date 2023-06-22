@@ -416,17 +416,31 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # create spotify instance
-    sp = spotipy.Spotify(auth_manager=auth_manager)
+    try:
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+    except:
+        message = await context.bot.send_message(chat_id=update.effective_chat.id,text="Failed to connect to music player")    
+        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
+        return
     
     # get the current track
-    track = sp.current_user_playing_track()
+    try:
+        track = sp.current_user_playing_track()
+    except:
+        track = None
+        
     title = "Nothing is playing at the moment"    
     if track:                    
         title = "🎵 {title} 🎵".format(title=spotifyhelper.get_track_title(track['item']))
     
-    # query the queue 
-    result = sp.queue()
-    
+    # query the queue
+    try:
+        result = sp.queue()
+    except:
+        message = await context.bot.send_message(chat_id=update.effective_chat.id,text="Failed to retrieve queue")    
+        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
+        return
+        
     text = ""
     for i in range(min(10,len(result['queue']))):
         item = result['queue'][i]       
@@ -656,13 +670,26 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     while numtries > 0:
         try:
             result = sp.search(searchstr)
+        except spotipy.oauth2.SpotifyOauthError:
+            # spotify not properly authenticated
+            logging.info("Spotify Oauth error")
+            message = await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Music player not available, search aborted.")
+            return
+            
         except spotipy.exceptions.SpotifyException:
             numtries -= 1
             if numtries == 0:
+                # spotify still triggers an exception
                 logging.error("Spotify returned and exception, not returning search result")
+                message = await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="Music player unavailable, search aborted.")
                 return
             logging.warning("Spotify returned and exception, retrying")
             continue
+        
         break
 
     # create a list of max five buttons, each with a unique song title
@@ -813,21 +840,16 @@ async def callback_paid_invoice(invoice: Invoice):
     except:
         logging.error("Could not  send message to the group that track was added to the queue")
 
+
     # make donation to the bot
     if settings.donate:
         jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
-        donation_amount : int = await spotifyhelper.get_donation_fee(invoice.chat_id)
+        donator = await userhelper.get_or_create_user(invoice.recipient.userid)
+        donation_amount : int = await userhelper.get_donation_fee(invoice.user)
         donation_amount = min(donation_amount,invoice.amount_to_pay)
         donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
-
-        if invoice is None:
-            logging.error("could not create invoice")
-            return 
-
-
-        result = await invoicehelper.pay_invoice(invoice.recipient, donation_invoice)
+        result = await invoicehelper.pay_invoice(donator, donation_invoice)
         
-    return
 
 async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
     """
@@ -897,7 +919,7 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                 logging.error("Exception while querying the current playing track at spotify")
                 continue
             
-            title = ""
+            title = "Nothing playing at the moment"
             if currenttrack is not None and 'item' in currenttrack and currenttrack['item'] is not None:
                 title = spotifyhelper.get_track_title(currenttrack['item'])
 
@@ -911,9 +933,6 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
               logging.info(json.dumps(currenttrack))
 
             # update the title
-            if len(title) == 0:
-                continue
-            
             if chat_id in now_playing_message:
                 [message_id, prev_title] = now_playing_message[chat_id]
                 if prev_title != title:
