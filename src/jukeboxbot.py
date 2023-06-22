@@ -665,14 +665,17 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             result = sp.search(searchstr)
         except spotipy.oauth2.SpotifyOauthError:
+            # spotify not properly authenticated
             logging.info("Spotify Oauth error")
             message = await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="Music player not available, search aborted.")
-
+            return
+            
         except spotipy.exceptions.SpotifyException:
             numtries -= 1
             if numtries == 0:
+                # spotify still triggers an exception
                 logging.error("Spotify returned and exception, not returning search result")
                 message = await context.bot.send_message(
                     chat_id=update.effective_chat.id,
@@ -680,6 +683,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 return
             logging.warning("Spotify returned and exception, retrying")
             continue
+        
         break
 
     # create a list of max five buttons, each with a unique song title
@@ -832,10 +836,11 @@ async def callback_paid_invoice(invoice: Invoice):
     
      # make donation to the bot
     jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
+    donator = await userhelper.get_or_create_user(invoice.recipient.userid)
     donation_amount : int = await userhelper.get_donation_fee(invoice.user)
     donation_amount = min(donation_amount,invoice.amount_to_pay)
     donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
-    result = await invoicehelper.pay_invoice(invoice.recipient, donation_invoice)
+    result = await invoicehelper.pay_invoice(donator, donation_invoice)
 
     return
 
