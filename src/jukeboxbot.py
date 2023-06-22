@@ -408,17 +408,31 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # create spotify instance
-    sp = spotipy.Spotify(auth_manager=auth_manager)
+    try:
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+    except:
+        message = await context.bot.send_message(chat_id=update.effective_chat.id,text="Failed to connect to music player")    
+        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
+        return
     
     # get the current track
-    track = sp.current_user_playing_track()
+    try:
+        track = sp.current_user_playing_track()
+    except:
+        track = None
+        
     title = "Nothing is playing at the moment"    
     if track:                    
         title = "🎵 {title} 🎵".format(title=spotifyhelper.get_track_title(track['item']))
     
-    # query the queue 
-    result = sp.queue()
-    
+    # query the queue
+    try:
+        result = sp.queue()
+    except:
+        message = await context.bot.send_message(chat_id=update.effective_chat.id,text="Failed to retrieve queue")    
+        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
+        return
+        
     text = ""
     for i in range(min(10,len(result['queue']))):
         item = result['queue'][i]       
@@ -650,10 +664,19 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     while numtries > 0:
         try:
             result = sp.search(searchstr)
+        except spotipy.oauth2.SpotifyOauthError:
+            logging.info("Spotify Oauth error")
+            message = await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Music player not available, search aborted.")
+
         except spotipy.exceptions.SpotifyException:
             numtries -= 1
             if numtries == 0:
                 logging.error("Spotify returned and exception, not returning search result")
+                message = await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="Music player unavailable, search aborted.")
                 return
             logging.warning("Spotify returned and exception, retrying")
             continue
