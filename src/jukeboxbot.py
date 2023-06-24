@@ -1098,11 +1098,14 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
             text=f"@{update.effective_user.username} added {invoice_title} to the queue.")
-        await context.bot.send_message(
-            chat_id=update.effective_user.id,
-            parse_mode='HTML',
-            text=f"You paid {amount_to_pay} sats for {invoice_title}.")
-
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                parse_mode='HTML',
+                text=f"You paid {amount_to_pay} sats for {invoice_title}.")
+        except:
+            logging.info("Could not send message to user")
+            
         # make donation to the bot
         jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
         donation_amount : int = await userhelper.get_donation_fee(invoice.user)
