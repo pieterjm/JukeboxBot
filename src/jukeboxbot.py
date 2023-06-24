@@ -801,7 +801,9 @@ async def callback_paid_invoice(invoice: Invoice):
     if invoice.chat_id is None:
         logging.error("Invoice chat_id is None")
         return
-    await invoicehelper.delete_invoice(invoice.payment_hash)
+    if await invoicehelper.delete_invoice(invoice.payment_hash) == False:
+        logging.info("invoicehelper.delete_invoice returned False")
+        return
 
     auth_manager = await spotifyhelper.get_auth_manager(invoice.chat_id)
     if auth_manager is None:

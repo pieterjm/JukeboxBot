@@ -166,13 +166,17 @@ class LNbits:
     # check wether an invoice has been paid. Returns True if paid. Otherwise False
     async def checkInvoice(self,invoicekey,payment_hash):
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.protocol}://{self.host}/api/v1/payments/{payment_hash}",
-                headers = {"X-Api-Key": invoicekey})
+            try:
+                response = await client.get(
+                    f"{self.protocol}://{self.host}/api/v1/payments/{payment_hash}",
+                    headers = {"X-Api-Key": invoicekey})
             
-            jsobj = json.loads(response.text)
-            if jsobj['paid'] == True:
-                return True
+                jsobj = json.loads(response.text)
+                if jsobj['paid'] == True:
+                    return True
+            except httpx.ReadTimeout:
+                logging.warning("LNbits read timeout")
+                return False
         return False
 
 

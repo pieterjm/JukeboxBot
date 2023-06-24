@@ -99,7 +99,9 @@ async def delete_invoice(payment_hash: str) -> bool:
         logging.error("Delete invoice called with None payment_hash")
         return False
     rediskey = f"invoice:{payment_hash}"
-    settings.rds.delete(rediskey)
+    if settings.rds.delete(rediskey) == 0:
+        logging.info("Invoice already deleted")
+        return False    
     return True
     
 async def invoice_paid(invoice: Invoice) -> bool:
