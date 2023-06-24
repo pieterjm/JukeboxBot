@@ -188,13 +188,10 @@ class LNbits:
             
                 jsobj = json.loads(response.text)
                 if jsobj['paid'] == True:
-                    return True                    
-            except Exception as ex:
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                message = template.format(type(ex).__name__, ex.args)
-                logging.error(message)
+                    return True
+            except httpx.ReadTimeout:
+                logging.warning("LNbits read timeout")
                 return False
-
         return False
 
 
