@@ -548,7 +548,6 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # create a message tyo do this in a private chat
     if update.message.chat.type != "private":
         bot_me = await context.bot.get_me()
-        print(f"https://t.me/{bot_me.username}")
     
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -798,17 +797,24 @@ async def callback_paid_invoice(invoice: Invoice):
     if invoice is None:
         logging.error("Invoice is None")
         return
+    logging.info("callback_paid_invoice")
+    logging.info(invoice.toJson())
+    
     if invoice.chat_id is None:
         logging.error("Invoice chat_id is None")
         return
+
     if await invoicehelper.delete_invoice(invoice.payment_hash) == False:
         logging.info("invoicehelper.delete_invoice returned False")
         return
 
+    
     auth_manager = await spotifyhelper.get_auth_manager(invoice.chat_id)
     if auth_manager is None:
         logging.error("No auth manager after succesfull payment")
         return
+
+
     
     try:
         logging.info(f"Trying to delete chat_id {invoice.chat_id}, messageid {invoice.message_id}")
@@ -816,8 +822,10 @@ async def callback_paid_invoice(invoice: Invoice):
     except:
         pass
 
+
     # add to the queue and inform others
     sp = spotipy.Spotify(auth_manager=auth_manager)
+    
     spotifyhelper.add_to_queue(sp, invoice.spotify_uri_list)
     try:
         await application.bot.send_message(
@@ -916,7 +924,6 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
             
             title = "Nothing playing at the moment"
             if currenttrack is not None and 'item' in currenttrack and currenttrack['item'] is not None:
-                #print(json.dumps(currenttrack))
                 title = spotifyhelper.get_track_title(currenttrack['item'])
 
                 # update history
@@ -1260,7 +1267,7 @@ async def main() -> None:
         if invoice is None:
             return Response("Invoice not found")
 
-        print(invoice.toJson())
+
         return Response(f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -1318,8 +1325,6 @@ async def main() -> None:
         """
 
         logging.info("Got callback from spotify")
-        print("Got callback from spotify")
-        print(request.url)
 
         if 'code' not in request.query_params:
             # callback without code
@@ -1347,7 +1352,6 @@ async def main() -> None:
         try:
             auth_manager = await spotifyhelper.get_auth_manager(chatid)                               
             if auth_manager is not None:
-                print(auth_manager.get_access_token(code))     
                 await userhelper.set_group_owner(chatid, userid)
                 await application.bot.send_message(
                     chat_id=userid,
