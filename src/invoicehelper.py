@@ -139,7 +139,6 @@ async def invoice_paid(invoice: Invoice) -> bool:
     assert(invoice.payment_hash is not None)
     result = await settings.lnbits.checkInvoice(invoice.recipient.invoicekey,invoice.payment_hash)
     if result == True:
-        await delete_invoice(invoice.payment_hash)
         return True
     else:
         return False

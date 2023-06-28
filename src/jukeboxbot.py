@@ -555,6 +555,7 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # create a message tyo do this in a private chat
     if update.message.chat.type != "private":
+
         bot_me = await context.bot.get_me()    
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -813,17 +814,24 @@ async def callback_paid_invoice(invoice: Invoice):
     if invoice is None:
         logging.error("Invoice is None")
         return
+    logging.info("callback_paid_invoice")
+    logging.info(invoice.toJson())
+    
     if invoice.chat_id is None:
         logging.error("Invoice chat_id is None")
         return
+
     if await invoicehelper.delete_invoice(invoice.payment_hash) == False:
         logging.info("invoicehelper.delete_invoice returned False")
         return
 
+    
     auth_manager = await spotifyhelper.get_auth_manager(invoice.chat_id)
     if auth_manager is None:
         logging.error("No auth manager after succesfull payment")
         return
+
+
     
     try:
         logging.info(f"Trying to delete chat_id {invoice.chat_id}, messageid {invoice.message_id}")
@@ -831,8 +839,10 @@ async def callback_paid_invoice(invoice: Invoice):
     except:
         pass
 
+
     # add to the queue and inform others
     sp = spotipy.Spotify(auth_manager=auth_manager)
+    
     spotifyhelper.add_to_queue(sp, invoice.spotify_uri_list)
     try:
         await application.bot.send_message(
@@ -843,11 +853,21 @@ async def callback_paid_invoice(invoice: Invoice):
         logging.error("Could not  send message to the group that track was added to the queue")
 
 
+
+    if False:
+        try:
+            await application.bot.send_message(
+                chat_id=invoice.user.userid,
+                parse_mode='HTML',
+                text=f"You paid {invoice.amount_to_pay} sats for {invoice.title}.")
+        except:
+            logging.info("Could not send individual message to user that")
+
     # make donation to the bot
     if settings.donate:
         jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
         donator = await userhelper.get_or_create_user(invoice.recipient.userid)
-        donation_amount : int = await userhelper.get_donation_fee(invoice.user)
+        donation_amount : int = await spotifyhelper.get_donation_fee(invoice.user)
         donation_amount = min(donation_amount,invoice.amount_to_pay)
         donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
         result = await invoicehelper.pay_invoice(donator, donation_invoice)
@@ -1114,6 +1134,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
             text=f"@{update.effective_user.username} added {invoice_title} to the queue.")
+
 
         try:
             await context.bot.send_message(
