@@ -19,7 +19,7 @@ for userkey in settings.rds.scan_iter("user:*"):
 
         user = asyncio.run(userhelper.get_or_create_user(tguserid, tgusername))
         balance = asyncio.run(userhelper.get_balance(user))
-        print(user.username, balance)
+        print(user.username, tguserid, balance)
         total += balance
     else:
         print("got a none user")
