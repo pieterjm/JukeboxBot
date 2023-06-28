@@ -839,7 +839,7 @@ async def callback_paid_invoice(invoice: Invoice):
      # make donation to the bot
     jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
     donator = await userhelper.get_or_create_user(invoice.recipient.userid)
-    donation_amount : int = await userhelper.get_donation_fee(invoice.user)
+    donation_amount : int = await spotifyhelper.get_donation_fee(invoice.chat_id)
     donation_amount = min(donation_amount,invoice.amount_to_pay)
     donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
     result = await invoicehelper.pay_invoice(donator, donation_invoice)
@@ -1108,7 +1108,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             
         # make donation to the bot
         jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
-        donation_amount : int = await userhelper.get_donation_fee(invoice.user)
+        donation_amount : int = await spotifyhelper.get_donation_fee(invoice.chat_id)
         donation_amount = min(donation_amount,invoice.amount_to_pay)
         donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
         result = await invoicehelper.pay_invoice(recipient, donation_invoice)

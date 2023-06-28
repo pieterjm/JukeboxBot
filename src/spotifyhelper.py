@@ -212,3 +212,22 @@ async def update_history(chat_id: int, title: str) -> None:
     # update last played entry
     settings.rds.hset(f"lastplayed:{chat_id}",title,int(time()))
         
+async def get_donation_fee(chat_id: int) -> int:
+    """
+    Gets the donation fee
+    """
+    rediskey = f"group:{chat_id}"
+    fee = settings.rds.hget(rediskey,"donation_fee")    
+    if fee is None:
+        fee = settings.donation_fee
+    fee = int(fee)
+    if fee < 0:
+        fee = settings.donation_fee
+    return int(fee)
+
+async def set_donation_fee(chat_id: int, fee: int) -> None:
+    """
+    Sets the donation fee
+    """
+    rediskey = f"group:{chat_id}"
+    settings.rds.hset(rediskey,"donation_fee",fee)    
