@@ -176,8 +176,14 @@ class LNbits:
             response = await client.get(
                 f"{baseurl}lnurlp/api/v1/links/{payid}",
                 headers={'X-Api-Key':adminkey})
-            return response.json()
 
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logging.error(f"LNbits returned and error {response.status_code}")
+                return None
+            
+            
     # check wether an invoice has been paid. Returns True if paid. Otherwise False
     async def checkInvoice(self,invoicekey,payment_hash):
         async with httpx.AsyncClient() as client:

@@ -360,13 +360,13 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     price = await spotifyhelper.get_price(update.effective_chat.id)
-    donation_amount = await spotifyhelper.get_donation_fee(update.effective_chat.id)
+    donation = await spotifyhelper.get_donation_fee(update.effective_chat.id)
 
     if update.message.text == '/price':
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
-            text=f"Current track price is {price} sats. Per request track {donation_amount} is sent to the Jukebox Bot.")
+            text=f"Current track price is {price}. Per requested track, {donation} sats is donated to the Jukebox Bot.")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
         return
 
@@ -376,6 +376,7 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if result is None:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
+
             text=f"Use command as follows: /price <price> <donation>\n<price> is the track price in sats\n<donation> is the amount donated to the bot per reqested track. The donation is substracted from the track price.")
         return        
 
@@ -394,7 +395,7 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id=update.effective_chat.id,
         text=f"Updating price to {newprice} sats. Donation amount is {newdonation} sats.")
     
-    context.job_queue.run_once(delete_message, 5, data={'message':update.message})
+    context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':update.message})
 
 # display the play queue
 @debounce
@@ -1257,7 +1258,10 @@ async def main() -> None:
         if 'command' not in request.query_params:
             return Response()
 
-        key = request.query_params['command'] 
+        key = request.query_params['command']
+        if key is None:
+            return Response()
+        
         command = telegramhelper.get_command(key)
         if command is None:
             return Response()
@@ -1268,9 +1272,10 @@ async def main() -> None:
         user = await userhelper.get_or_create_user(command.userid) 
         if user is None:
             return      
-        
-        lnurl = await userhelper.get_funding_lnurl(user)
 
+        lnurl = await userhelper.get_funding_lnurl(user)
+        
+            
 
         return Response(f"""
 <!DOCTYPE html>
