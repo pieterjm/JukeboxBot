@@ -455,7 +455,56 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = await context.bot.send_message(chat_id=update.effective_chat.id,text=text)    
     context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
 
-        
+@debounce
+@adminonly
+async def service(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    This command sends a service message to all Jukebot group owners, that is all users marked as owner of a group
+    """
+    userid: int = update.effective_user.id
+
+    if update.message.chat.type != "private":
+        return
+
+    if userid not in settings.superadmins:
+        logging.info(f"User {userid} is not a superadmin. Access to stats denied")
+        return
+
+    result = re.search("^/service\s+(.*)$",update.message.text)
+    if result is None:
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Use the /service command as follows: /service <message>\nThe message is sent to all owners of bot")
+        return
+
+    # set message
+    msgstr = result.groups()[0]
+
+    results = await statshelper.get_jukebox_groups()
+    num = 0
+    for group in results['group']:
+        # skip if no owner is set
+        if group['owner'] is None:
+            continue
+
+        # send a message each owner
+        try:
+            message = await context.bot.send_message(
+                chat_id=group['owner'].userid,
+                text=f"Service message from the Jukebox Bot:\n\n{msgstr}\n\nThank you!")
+            num += 1
+        except:
+            pass
+
+    # send a message each owner
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"The following message was sent to {num} users:\n\nService message from the Jukebox Bot:\n\n{msgstr}\n\nThank you!")
+
+            
+    
+    
+    
 # connect a spotify player to the bot, the setclient secret and set client id commands
 @debounce
 async def spotify_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1208,6 +1257,7 @@ async def main() -> None:
     application.add_handler(CommandHandler('refund', pay)) # pay a lightning invoice
     application.add_handler(CommandHandler('price', price)) # set the track price
     application.add_handler(CommandHandler('queue', queue)) # view the queue
+    application.add_handler(CommandHandler('service', service)) # service notifications to bot users
     application.add_handler(CommandHandler("setclientsecret",spotify_settings)) # set the secret for a spotify app
     application.add_handler(CommandHandler("setclientid",spotify_settings))  # set the clientid or a spotify app
     application.add_handler(CommandHandler("stats",stats)) # dump various stats
