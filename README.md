@@ -21,7 +21,8 @@ A Bitcoin lightning enabled Jukebox for Telegram
  - Silent disco feature! 3-channels, crowd is the dj! 
  - Congestion control: For buys moments, a mode where only n of x requested tracks get added to the list (fair chance). This will probably increase the load even more. Just make more requests, best way is to increase the price. 
  - Audio players other than spotify
- - Improved faucet over LNtips with congestion control. 
+ - Improved faucet over LNtips with congestion control.
+ - Alternative price for a number of tracks: the price for the next three tracks is 0 or 1 sat 
 
  ## Backlog:
  - Test scripts for telegram itself

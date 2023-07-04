@@ -4,15 +4,17 @@
 
 The following commands can be copy and pasted into the botfather to set the correct commands 
 
+```
 faq - View the bot FAQ
 add - Add music to the queue
 queue - View queue
 history - View history
-stack - View you balance
+stack - View your balance
 dj - Sent sats to another user
 link - Connect via lndhub (BlueWallet, Zeus)
 fund - Prefund your personal wallet
 refund - Withdraw sats from your personal wallet
+```
 
 ## User commands:
 1.  /faq
