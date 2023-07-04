@@ -467,15 +467,15 @@ async def service(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.info(f"User {userid} is not a superadmin. Access to stats denied")
         return
 
-    result = re.search("^/service\s+(.*)$",update.message.text)
+    result = re.search("^/service \S.*",update.message.text)
     if result is None:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"Use the /service command as follows: /service <message>\nThe message is sent to all owners of bot")
         return
 
-    # set message
-    msgstr = result.groups()[0]
+    # set message, strip the command
+    msgstr = update.message.text[9:]
 
     results = await statshelper.get_jukebox_groups()
     num = 0
