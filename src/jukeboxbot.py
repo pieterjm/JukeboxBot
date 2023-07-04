@@ -359,34 +359,40 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     price = await spotifyhelper.get_price(update.effective_chat.id)
-
+    donation = await spotifyhelper.get_donation_fee(update.effective_chat.id)
+    
     if update.message.text == '/price':
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             parse_mode='HTML',
-            text=f"Current track price is {price}")
+            text=f"Current track price is {price}. Per requested track, {donation} sats is donated to the Jukebox Bot.")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
         return
 
-    newprice = update.message.text.split(' ',1)
-    if len(newprice) > 1:
-        newprice = newprice[1]
-        if newprice.isdigit():
-            newprice = int(newprice)
-            if newprice == 0 or newprice >= 21:
-                price = newprice
 
-                await spotifyhelper.set_price(update.effective_chat.id, price)
+    # parse and validate the price command
+    result = re.search("/price\s+([0-9]+)\s+([0-9]+)$",update.message.text)
+    if result is None:
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Use command as follows: /price <price> <donation>\n<price> is the track price in sats\n<donation> is the amount in sats donated to the bot per reqested track. The donation is substracted from the track price.")
+        return
 
-                message = await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=f"Updating price to {price} sats.")
-                return
-    
+    newprice = int(result.groups()[0])
+    newdonation = int(result.groups()[1])
+
+    if newdonation > newprice:
+        newdonation = newprice
+
+    # update 
+    await spotifyhelper.set_price(update.effective_chat.id, newprice)
+    await spotifyhelper.set_donation_fee(update.effective_chat.id, newdonation)
+        
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text="Use /price <sats>. Price is either 0 or 21 or more sats.")        
-    context.job_queue.run_once(delete_message, 5, data={'message':update.message})
+        text=f"Updating price to {newprice} sats. Donation amount is {newdonation} sats.")
+    
+    context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':update.message})
 
 # display the play queue
 @debounce
@@ -1217,7 +1223,10 @@ async def main() -> None:
         if 'command' not in request.query_params:
             return Response()
 
-        key = request.query_params['command'] 
+        key = request.query_params['command']
+        if key is None:
+            return Response()
+        
         command = telegramhelper.get_command(key)
         if command is None:
             return Response()
@@ -1228,9 +1237,10 @@ async def main() -> None:
         user = await userhelper.get_or_create_user(command.userid) 
         if user is None:
             return      
-        
-        lnurl = await userhelper.get_funding_lnurl(user)
 
+        lnurl = await userhelper.get_funding_lnurl(user)
+        
+            
 
         return Response(f"""
 <!DOCTYPE html>

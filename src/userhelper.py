@@ -110,12 +110,26 @@ async def get_funding_lnurl(user: User) -> str:
     """
     Return the funding LNURL
     """
+    if user is None:
+        logging.info(f"User is None")
+        return None
+    if user.lnurlp is None:
+        logging.info(f"User.lnurlp is None")
+        return None
+
+    logging.info(f"Get funding URL for {user.lnurlp}")
+    
     result = re.search(".*\/([A-Za-z0-9]+)",user.lnurlp)
     if result:
         payid = result.groups()[0]
         details = await settings.lnbits.getLnurlp(f"https://{settings.domain}/",user.invoicekey,payid)
+        if details is None:
+            logging.error("getLnurlp returned None")
+            return None
+        
         return details['lnurl']
     else:
+        logging.error("No LNURL found for user")
         return None
 
 async def get_or_create_user(userid: int,username: str = None) -> User:
