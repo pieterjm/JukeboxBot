@@ -171,8 +171,10 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     statsText += f"Number of groups: {results['numgroups']}. List of owners: \n"
     for group in results['group']:
-        statsText += f" - {group['groupid']} : @{group['owner'].username}\n"
-
+        if group['owner'] is not None:
+            statsText += f" - {group['groupid']} : @{group['owner'].username}\n"
+        else:
+            statsText += f" - {group['groupid']} : Unknown owner\n"
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=statsText)
