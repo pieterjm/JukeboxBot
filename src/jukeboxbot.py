@@ -24,7 +24,7 @@ import statshelper
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response, RedirectResponse
+from starlette.responses import PlainTextResponse, Response, RedirectResponse, HTMLResponse
 from starlette.routing import Route
 
 from telegram import __version__ as TG_VER
@@ -148,6 +148,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # send the message
     message = await context.bot.send_message(chat_id=update.effective_chat.id,text=jukeboxtexts.help)
 
+    
     # only create a callback to delete the message when not in a private chat
     if update.message.chat.type != "private":
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
@@ -911,6 +912,28 @@ async def callback_paid_invoice(invoice: Invoice):
 
     return
 
+
+@debounce
+async def web(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    return the Web URL where tracks can be requested using a browser
+    """
+    userid: int = update.effective_user.id
+
+    if update.message.chat.type == "private":
+        return
+
+    if userid not in settings.superadmins:
+        logging.info(f"User {userid} is not a superadmin. Access to test functionality denied")
+        return    
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"Jukebox URL: https://{settings.domain}/jukebox/web/{update.effective_chat.id}")
+
+    context.job_queue.run_once(delete_message, settings.delete_message_timeout_long, data={'message':message})
+    
+
 async def check_invoice_callback(context: ContextTypes.DEFAULT_TYPE):
     """
     This function checks an invoice if it has been paid
@@ -1231,6 +1254,7 @@ async def main() -> None:
     application.add_handler(CommandHandler("stats",stats)) # dump various stats
     application.add_handler(CommandHandler(["start","faq"],start))  # help message
     application.add_handler(CommandHandler('dj', dj))  # pay another user    
+    application.add_handler(CommandHandler('web', web))  # display the web URL
 
     application.add_handler(CallbackQueryHandler(callback_button))
     application.job_queue.run_repeating(regular_cleanup, 12 * 3600)
@@ -1462,6 +1486,180 @@ async def main() -> None:
                 text=f"Received {amount} sats. Type /stack to view your sats stack.")
         return Response()
 
+    async def web_home(request: Request) -> PlainTextResponse:
+        chat_id = request.path_params['chat_id']
+        
+        if chat_id is None:
+            return HTMLResponse("Incomplete request")
+
+        try:
+            chat_id = int(chat_id)
+        except:
+            return HTMLResponse("Incomplete request")
+
+        # get spotify auth manager 
+        auth_manager = await spotifyhelper.get_auth_manager(chat_id)                               
+        if auth_manager is None:
+            return HTMLResponse("Incomplete request")
+
+        return HTMLResponse(f"""
+        <form method="POST" action="/jukebox/web/{chat_id}/search">
+            <input name="query" value="">
+            <input type="submit">
+        </form>
+        """)
+
+    async def web_search(request: Request) -> HTMLResponse:
+        chat_id = request.path_params['chat_id']
+
+        # validate that chat_id is present
+        if chat_id is None:
+            return HTMLResponse("Incomplete request")
+
+        # validate that chat_id is a digit
+        try:
+            chat_id = int(chat_id)
+        except:
+            return HTMLResponse("Incomplete request")
+        
+        # get form
+        form = await request.form()
+
+        # validate that form is present
+        if form is None:
+            return HTMLResponse("Incomplete request")
+
+        # get query
+        query = form.get("query")
+
+        # validate that query is present
+        if query is None:
+            return HTMLResponse("Incomplete request")
+
+        # validate allow characters in query
+        if not re.search("^[A-Za-z0-9 ]+$",query):
+            return HTMLResponse("Incomplete request")
+            
+        # get spotify auth manager 
+        auth_manager = await spotifyhelper.get_auth_manager(chat_id)                               
+        if auth_manager is None:
+            return HTMLResponse("Incomplete request")
+            
+        # create spotify instance
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+        if sp is None:
+            return HTMLResponse("Incomplete response")
+
+        # search for tracks
+        numtries: int = 3
+        while numtries > 0:
+            try:
+                result = sp.search(query)
+            except spotipy.exceptions.SpotifyException:
+                numtries -= 1
+                if numtries == 0:
+                    logging.error("Spotify returned and exception, not returning search result")
+                    return HTMLResponse("Search currently unavailable")
+                logging.warning("Spotify returned and exception, retrying")
+                continue
+            break
+
+        # create a list of max five items
+        if len(result['tracks']['items']) == 0:
+            return HTMLResponse("No results for query. Try again")
+
+        tracktitles  = {}
+        trackoptions = ""
+        for item in result['tracks']['items']:            
+            title = spotifyhelper.get_track_title(item)
+            track_id = item['uri']
+            result = re.search("^spotify:track:([A-Z0-9a-z]+)$",track_id)
+            if not result:
+                continue
+
+            # strip spotify from the track id
+            track_id = result.groups()[0]
+
+            if title not in tracktitles:
+                tracktitles[title] = 1
+                trackoptions += f'<A HREF="/jukebox/web/{chat_id}/add?track_id={track_id}">{title}<BR>'
+                
+                # max five suggestions
+                if len(tracktitles) == 5:
+                    break
+
+        return HTMLResponse(trackoptions)
+
+
+    async def web_add(request: Request) -> HTMLResponse:
+        chat_id = request.path_params['chat_id']
+        track_id = request.query_params['track_id']        
+
+        # validate that chat_id is present
+        if chat_id is None:
+            logging.info("chat_id is NULL")
+            return HTMLResponse("Incomplete request")
+
+        # validate that chat_id is a digit
+        try:
+            chat_id = int(chat_id)
+        except:
+            logging.warning("chat_id is not an integer")
+            return HTMLResponse("Incomplete request")
+
+        # validate track_id is not None
+        if track_id is None:
+            logging.info("track_id is None")
+            return HTMLResponse("incomplete request")
+
+        # vaidate track id is spotify track
+        #spotify:track:1532ejaMFnQPcHD9BAeqwr
+        if not re.search("^[A-Za-z0-9]+$",track_id):
+            logging.warning("track_id does not match regular expression")
+            return HTMLResponse("incomplete request")
+
+        # add spotify prefix to the track_id
+        track_id = f"spotify:track:{track_id}"
+
+        # get spotify auth manager 
+        auth_manager = await spotifyhelper.get_auth_manager(chat_id)                               
+        if auth_manager is None:
+            logging.warning("Auth_manager is NULL")
+            return HTMLResponse("Incomplete request")
+       
+        # create spotify instance
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+
+        if sp is None:
+            logging.warning("sp is None")
+            return HTMLResponse("Incomplete request")
+
+        amount_to_pay = int(await spotifyhelper.get_price(chat_id))
+        recipient = await userhelper.get_group_owner(chat_id)
+        invoice_title = f"'{spotifyhelper.get_track_title(sp.track(track_id))}'"
+        invoice = await invoicehelper.create_invoice(recipient, amount_to_pay, invoice_title)
+        if invoice is None:
+            return HTMLResponse("Payments unavailable atm")
+
+        invoice.user = User(80,"Web user")
+        invoice.title = invoice_title
+        invoice.recipient = recipient   
+        logging.info("recipient when creating invoice: " + recipient.toJson())
+        invoice.spotify_uri_list = [ track_id ]
+        invoice.title = invoice_title
+        invoice.chat_id = chat_id
+        invoice.amount_to_pay = amount_to_pay
+
+        # save the invoice
+        await invoicehelper.save_invoice(invoice)
+
+        application.job_queue.run_once(check_invoice_callback, 15, data = invoice)
+
+        return Response(f"""<A href="https://{settings.domain}/jukebox/payinvoice?payment_hash={invoice.payment_hash}">Pay</a>""")
+       
+
+    
+
     starlette_app = Starlette(
         routes=[
             Route(f"/jukebox/telegram", telegram, methods=["GET","POST"]),
@@ -1470,7 +1668,11 @@ async def main() -> None:
             Route("/jukebox/payinvoice",payinvoice_callback, methods=["GET"]),
             Route("/jukebox/invoicecallback",invoicepaid_callback, methods=["POST"]),
             Route("/jukebox/status.json",jukebox_status, methods=["GET"]),
-            Route("/jukebox/fund",jukebox_fund, methods=["GET"])
+            Route("/jukebox/fund",jukebox_fund, methods=["GET"]),
+            Route("/jukebox/web/{chat_id}",web_home, methods=["GET"]),
+            Route("/jukebox/web/{chat_id}/search",web_search, methods=["POST"]),
+            Route("/jukebox/web/{chat_id}/add",web_add, methods=["GET"])
+            
         ]
     )
 
