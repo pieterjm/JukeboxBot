@@ -1336,7 +1336,7 @@ async def main() -> None:
       </div>
     </div>
   </div>
-  <script src="/jukebox/assets/JukeboxBotFund.js"></script>
+  <script src="/jukebox/assets/JukeboxBotFund.js"></script>   
 </body>
 </html>
 """)
@@ -1369,10 +1369,12 @@ async def main() -> None:
           <img id="qr-code-image" alt="QR code image" invoice="{invoice.payment_request}" paymenthash="{invoice.payment_hash}">
         </div>
         <button class="copy-data" aria-label="Copy invoice"></button>
+        <pay-with-ln payment-request="{invoice.payment_request}"></pay-with-ln>
       </div>
     </div>
   </div>
   <script src="/jukebox/assets/JukeboxBotInvoice.js"></script>
+  <script src="https://unpkg.com/pay-with-ln@0.1.0/dist/pay-with-ln.js" integrity="sha384-Uid8n0M8dpAoE1SOQOXOcMfDy9hvqtSp+A3xMFilQn+Z6fxsnmCayPVP8na5vdAv" crossorigin="anonymous"></script>
 </body>
 </html>
 """)
@@ -1411,6 +1413,7 @@ async def main() -> None:
         logging.info("Got callback from spotify")
 
         if 'code' not in request.query_params:
+            logging.error("no code in response from spotify")
             # callback without code
             return Response()
 
@@ -1430,12 +1433,15 @@ async def main() -> None:
             chatid = int(chatid)            
             userid = int(userid)
         except:
-            logging.error("Failure during query parameter parsing")
+            logging.error("Failure during state query parameter parsing")
             return Response()
+
+        logging.info(f"Spotify callback for {chatid} {userid} with code {code}")
 
         try:
             auth_manager = await spotifyhelper.get_auth_manager(chatid)                               
             if auth_manager is not None:
+                auth_manager.get_access_token(code)                    
                 await userhelper.set_group_owner(chatid, userid)
                 await application.bot.send_message(
                     chat_id=userid,
