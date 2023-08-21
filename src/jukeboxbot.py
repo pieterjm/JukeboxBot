@@ -24,7 +24,7 @@ import statshelper
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response, RedirectResponse, HTMLResponse
+from starlette.responses import PlainTextResponse, Response, RedirectResponse, HTMLResponse, JSONResponse
 from starlette.routing import Route
 
 from telegram import __version__ as TG_VER
@@ -1508,53 +1508,115 @@ async def main() -> None:
         if auth_manager is None:
             return HTMLResponse("Incomplete request")
 
-        return HTMLResponse(f"""
-        <form method="POST" action="/jukebox/web/{chat_id}/search">
-            <input name="query" value="">
-            <input type="submit">
-        </form>
-        """)
+        return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Add Music</title>
+    <link rel="stylesheet" href="/jukebox/assets/JukeboxBot.css?4689">
+  </head>
+  <body>
+    <form onsubmit="submitSearch(); return false;" action="">
+      <div class="container">
+        <div class="image-container">
+          <div class="image-content">
+            <img src="/jukebox/assets/jukeboxbot_addmusic.png" alt="JukeboxBot" />
+            <div class="search-container">
+              <input name="query" value="">
+            </div>
+            <button class="search-button" type="submit" aria-label="Search"></button>
+            <div class="search-results-container">
+              <div class="search-result-container"></div>
+              <div class="search-result-container"></div>
+              <div class="search-result-container"></div>
+              <div class="search-result-container"></div>
+              <div class="search-result-container"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </body>
+  <script>
+   const req1 = new XMLHttpRequest();	
+   req1.onreadystatechange = function() {{
+      if (this.readyState == 4 && this.status == 200) {{
+        obj = JSON.parse(this.responseText);
+        if ( obj.status == 200 ) {{
+          var nodes = document.querySelectorAll(".search-result-container");
+          for(let i=0;(i<obj.results.length);i++) {{
+            nodes[i].innerText = obj.results[i].title;
+            nodes[i].onclick = function(){{
+              req2.open("GET","/jukebox/web/{chat_id}/add?track_id=" + obj.results[i].track_id);
+              req2.setRequestHeader("Accept", "application/json");	
+              req2.setRequestHeader("Content-Type", "application/json"); 
+              req2.send();             
+            }};
+          }}
+        }}
+      }}
+   }};
 
-    async def web_search(request: Request) -> HTMLResponse:
+   const req2 = new XMLHttpRequest();
+   req2.onreadystatechange = function() {{        
+      if (this.readyState == 4 && this.status == 200) {{
+        obj = JSON.parse(this.responseText);
+        if ( obj.status == 200 ) {{
+          window.location.href = obj.payment_url;
+        }}
+      }}
+   }};
+
+  function submitSearch() {{  
+    req1.open("POST", "/jukebox/web/{chat_id}/search"); 
+    req1.setRequestHeader("Accept", "application/json");	
+    req1.setRequestHeader("Content-Type", "application/json"); 
+    req1.send(JSON.stringify({{query:document.getElementsByName("query")[0].value}}));
+  }}  
+
+  </script> </html>""")
+
+    async def web_search(request: Request) -> JSONResponse:
         chat_id = request.path_params['chat_id']
-
+        print("Web search")
+        
         # validate that chat_id is present
         if chat_id is None:
-            return HTMLResponse("Incomplete request")
-
+            return JSONResponse({"status":400,"message":"Incomplete request. Chat ID is None"})
+        
         # validate that chat_id is a digit
         try:
             chat_id = int(chat_id)
         except:
-            return HTMLResponse("Incomplete request")
+            return JSONResponse({"status":400,"message":"Incomplete request. Failed to cast chat_id"})
         
-        # get form
-        form = await request.form()
-
+        # get form        
+        form = await request.json()
+        
+        print("Web search for ",form)
         # validate that form is present
         if form is None:
-            return HTMLResponse("Incomplete request")
+            return JSONResponse({"status":400,"message":"Incomplete request form is None"})
 
         # get query
-        query = form.get("query")
+        query = form["query"]
 
         # validate that query is present
         if query is None:
-            return HTMLResponse("Incomplete request")
+            return JSONResponse({"status":400,"message":"Incomplete request query is None"})
 
         # validate allow characters in query
         if not re.search("^[A-Za-z0-9 ]+$",query):
-            return HTMLResponse("Incomplete request")
+            return JSONResponse({"status":400,"message":"Incomplete request query is invalid"})
             
         # get spotify auth manager 
         auth_manager = await spotifyhelper.get_auth_manager(chat_id)                               
         if auth_manager is None:
-            return HTMLResponse("Incomplete request")
+            return JSONResponse({"status":400,"message":"Incomplete request auth manager is None"})
             
         # create spotify instance
         sp = spotipy.Spotify(auth_manager=auth_manager)
         if sp is None:
-            return HTMLResponse("Incomplete response")
+            return JSONResponse({"status":400,"message":"Incomplete response sp is none"})
 
         # search for tracks
         numtries: int = 3
@@ -1565,17 +1627,18 @@ async def main() -> None:
                 numtries -= 1
                 if numtries == 0:
                     logging.error("Spotify returned and exception, not returning search result")
-                    return HTMLResponse("Search currently unavailable")
+                    return JSONResponse({"status":400,"message":"Search currently unavailable"})
                 logging.warning("Spotify returned and exception, retrying")
                 continue
             break
 
         # create a list of max five items
         if len(result['tracks']['items']) == 0:
-            return HTMLResponse("No results for query. Try again")
-
+            return JSONResponse({"status":200,"results":[]})
+        
         tracktitles  = {}
-        trackoptions = ""
+        results = []
+
         for item in result['tracks']['items']:            
             title = spotifyhelper.get_track_title(item)
             track_id = item['uri']
@@ -1588,41 +1651,44 @@ async def main() -> None:
 
             if title not in tracktitles:
                 tracktitles[title] = 1
-                trackoptions += f'<A HREF="/jukebox/web/{chat_id}/add?track_id={track_id}">{title}<BR>'
-                
+                results.append({"title":title,"track_id":track_id})
+                                
                 # max five suggestions
-                if len(tracktitles) == 5:
+                if len(results) == 5:
                     break
 
-        return HTMLResponse(trackoptions)
+        return JSONResponse({"status":200,"results":results})
 
 
-    async def web_add(request: Request) -> HTMLResponse:
+    async def web_add(request: Request) -> JSONResponse:
         chat_id = request.path_params['chat_id']
         track_id = request.query_params['track_id']        
 
         # validate that chat_id is present
         if chat_id is None:
             logging.info("chat_id is NULL")
-            return HTMLResponse("Incomplete request")
+            return JSONResponse({"status":400,"message":"Incomplete request"})
 
         # validate that chat_id is a digit
         try:
             chat_id = int(chat_id)
         except:
             logging.warning("chat_id is not an integer")
-            return HTMLResponse("Incomplete request")
+            return JSONResponse({"status":400,"message":"Incomplete request"})
+        
 
         # validate track_id is not None
         if track_id is None:
             logging.info("track_id is None")
-            return HTMLResponse("incomplete request")
+            return JSONResponse({"status":400,"message":"Incomplete request"})
+
 
         # vaidate track id is spotify track
         #spotify:track:1532ejaMFnQPcHD9BAeqwr
         if not re.search("^[A-Za-z0-9]+$",track_id):
             logging.warning("track_id does not match regular expression")
-            return HTMLResponse("incomplete request")
+            return JSONResponse({"status":400,"message":"Incomplete request"})
+
 
         # add spotify prefix to the track_id
         track_id = f"spotify:track:{track_id}"
@@ -1631,21 +1697,24 @@ async def main() -> None:
         auth_manager = await spotifyhelper.get_auth_manager(chat_id)                               
         if auth_manager is None:
             logging.warning("Auth_manager is NULL")
-            return HTMLResponse("Incomplete request")
+            return JSONResponse({"status":400,"message":"Incomplete request"})
+
        
         # create spotify instance
         sp = spotipy.Spotify(auth_manager=auth_manager)
 
         if sp is None:
             logging.warning("sp is None")
-            return HTMLResponse("Incomplete request")
+            return JSONResponse({"status":400,"message":"Incomplete request"})
+
 
         amount_to_pay = int(await spotifyhelper.get_price(chat_id))
         recipient = await userhelper.get_group_owner(chat_id)
         invoice_title = f"'{spotifyhelper.get_track_title(sp.track(track_id))}'"
         invoice = await invoicehelper.create_invoice(recipient, amount_to_pay, invoice_title)
         if invoice is None:
-            return HTMLResponse("Payments unavailable atm")
+            return JSONResponse({"status":400,"message":"Payments not available"})
+
 
         invoice.user = User(80,"Web user")
         invoice.title = invoice_title
@@ -1661,9 +1730,7 @@ async def main() -> None:
 
         application.job_queue.run_once(check_invoice_callback, 15, data = invoice)
 
-        return Response(f"""<A href="https://{settings.domain}/jukebox/payinvoice?payment_hash={invoice.payment_hash}">Pay</a>""")
-       
-
+        return JSONResponse({"status":200,"payment_url":f"https://{settings.domain}/jukebox/payinvoice?payment_hash={invoice.payment_hash}"});
     
 
     starlette_app = Starlette(
