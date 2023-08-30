@@ -923,13 +923,9 @@ async def web(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.chat.type == "private":
         return
 
-    if userid not in settings.superadmins:
-        logging.info(f"User {userid} is not a superadmin. Access to test functionality denied")
-        return    
-    
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"Jukebox URL: https://{settings.domain}/jukebox/web/{update.effective_chat.id}")
+        text=f"Access this Jukebox directly through the following URL: https://{settings.domain}/jukebox/web/{update.effective_chat.id}")
 
     context.job_queue.run_once(delete_message, settings.delete_message_timeout_long, data={'message':message})
     
@@ -1708,9 +1704,16 @@ async def main() -> None:
             return JSONResponse({"status":400,"message":"Incomplete request"})
 
 
+        track = sp.track(track_id)        
+        track_len = track['duration_ms'] / 1000
+        
         amount_to_pay = int(await spotifyhelper.get_price(chat_id))
+        if ( track_len > 1800 ):
+            amount_to_pay = 420000
+        elif ( track_len > 300 ):
+            amount_to_pay = amount_to_pay * 1.0166428 ** (track_len - 300)
         recipient = await userhelper.get_group_owner(chat_id)
-        invoice_title = f"'{spotifyhelper.get_track_title(sp.track(track_id))}'"
+        invoice_title = f"'{spotifyhelper.get_track_title(track)}'"
         invoice = await invoicehelper.create_invoice(recipient, amount_to_pay, invoice_title)
         if invoice is None:
             return JSONResponse({"status":400,"message":"Payments not available"})
