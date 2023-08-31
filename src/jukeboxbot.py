@@ -15,11 +15,8 @@ import string
 import telegramhelper
 from telegramhelper import TelegramCommand
 import statshelper
-
-#TODO: 
-# get or create user lijkt nog niet altijd goed te gaan
-# lndhub link ga een error, maar gaat wel goed
-# bij kopieren, CSS aanpassen
+import qrcode
+from PIL import Image
 
 import uvicorn
 from starlette.applications import Starlette
@@ -620,7 +617,7 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # we're in a private chat now
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
 
-    # create QR code for the link    
+    # create QR code for the link
     filename = userhelper.get_qrcode_filename(user.lndhub)
     with open(filename,'rb') as file:
         await context.bot.send_photo(
@@ -923,9 +920,27 @@ async def web(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.chat.type == "private":
         return
 
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"Access this Jukebox directly through the following URL: https://{settings.domain}/jukebox/web/{update.effective_chat.id}")
+    jukebox_url = f"https://{settings.domain}/jukebox/web/{update.effective_chat.id}"
+    filename = os.path.join(settings.qrcode_path,f"web_url_{update.effective_chat.id}.png")
+
+    if not os.path.isfile(filename):    
+        img_bg = Image.open('../assets/web_jukebox_template.png')
+        qr = qrcode.QRCode(box_size=7, border=0)
+        qr.add_data(jukebox_url)
+        qr.make()
+        img_qr = qr.make_image()
+        pos = (int((img_bg.size[0] - img_qr.size[0])/2), 385 - int(img_qr.size[1] / 2))
+        img_bg.paste(img_qr, pos)
+        img_bg.save(filename)
+
+
+    with open(filename,'rb') as file:
+        message = await context.bot.send_photo(
+            update.effective_chat.id,
+            file,
+            caption=f'Access this Jukebox directly at the following URL: {jukebox_url}. Pro tip: print out this image and scan it with your phone.',
+            parse_mode='HTML')
+
 
     context.job_queue.run_once(delete_message, settings.delete_message_timeout_long, data={'message':message})
     
