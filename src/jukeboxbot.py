@@ -1532,7 +1532,7 @@ async def main() -> None:
           <div class="image-content">
             <img src="/jukebox/assets/jukeboxbot_addmusic.png" alt="JukeboxBot" />
             <div class="search-container">
-              <input name="query" value="">
+              <input name="query" value="" placeholder="Enter song title">
             </div>
             <button class="search-button" type="submit" aria-label="Search"></button>
             <div class="search-results-container">
