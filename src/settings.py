@@ -56,7 +56,7 @@ def init():
     port = 7000
     
     price = 21
-    fund_max = 21000
+    fund_max = 42000
     fund_min = price
     rds = redis.Redis(db=2)
     lnbits = LNbits(

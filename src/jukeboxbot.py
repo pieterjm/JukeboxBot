@@ -1723,10 +1723,12 @@ async def main() -> None:
         track_len = track['duration_ms'] / 1000
         
         amount_to_pay = int(await spotifyhelper.get_price(chat_id))
-        if ( track_len > 1800 ):
-            amount_to_pay = 420000
-        elif ( track_len > 300 ):
-            amount_to_pay = amount_to_pay * 1.0166428 ** (track_len - 300)
+        if ( track_len > 600 ):
+            amount_to_pay = 10 * amount_to_pay
+#        if ( track_len > 1800 ):
+#            amount_to_pay = 10 * amount_
+#        elif ( track_len > 600 ):
+#            amount_to_pay = amount_to_pay * 1.0166428 ** (track_len - 300)
         recipient = await userhelper.get_group_owner(chat_id)
         invoice_title = f"'{spotifyhelper.get_track_title(track)}'"
         invoice = await invoicehelper.create_invoice(recipient, amount_to_pay, invoice_title)
