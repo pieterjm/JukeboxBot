@@ -1010,7 +1010,7 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                 sp = spotipy.Spotify(auth_manager=auth_manager)
                 currenttrack = sp.current_user_playing_track()
             except:
-                logging.error("Exception while querying the current playing track at spotify")
+                logging.info("Exception while querying the current playing track at spotify")
                 continue
             
             title = "Nothing playing at the moment"
@@ -1045,12 +1045,15 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                     now_playing_message[chat_id] = [ message.id, title ]
                 except:
                     logging.error("Exception when sending message to group")
+    except:
+       logging.error("Unhandled exception in callback_spotify")             
     finally:
-        if interval < 1 or interval > 300:
-            interval = 60
-        context.job_queue.run_once(callback_spotify, interval)
-
-
+        if interval < 30 or interval > 300:
+            interval = 30
+        logging.info(f"Next run in {interval} seconds")
+        context.job_queue.run_once(callback_spotify, interval, job_kwargs = {'misfire_grace_time':None})
+                                                               
+        
 #callback for button presses
 async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
