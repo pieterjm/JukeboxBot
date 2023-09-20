@@ -889,6 +889,14 @@ async def callback_paid_invoice(invoice: Invoice):
             text=f"'{invoice.title}' was added to the queue.")
     except:
         logging.error("Could not  send message to the group that track was added to the queue")
+    
+    try:
+        async with aiomqtt.Client("localhost") as client:
+            await client.publish(f"{invoice.chat_id}/added_to_queue", payload=invoice.title)
+    except:
+        logging.error("Exception when publishing queue add to mqtt")
+        pass
+        
 
     if False:
         try:
@@ -1165,15 +1173,34 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         spotifyhelper.add_to_queue(sp, spotify_uri_list)
 
         for uri in spotify_uri_list:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                parse_mode='HTML',
-                text=f"@{update.effective_user.username} added '{spotifyhelper.get_track_title(sp.track(uri))}' to the queue.")
-            await context.bot.send_message(
-                chat_id=update.effective_user.id,
-                parse_mode='HTML',
-                text=f"You added '{spotifyhelper.get_track_title(sp.track(uri))}' to the queue for {amount_to_pay} sats.")
-                
+
+            tracktitle = spotifyhelper.get_track_title(sp.track(uri))
+            
+            try:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    parse_mode='HTML',
+                    text=f"@{update.effective_user.username} added '{tracktitle}' to the queue.")
+            except:
+                pass
+
+            try:
+                await context.bot.send_message(
+                    chat_id=update.effective_user.id,
+                    parse_mode='HTML',
+                    text=f"You added '{tracktitle}' to the queue for {amount_to_pay} sats.")
+            except:
+                pass
+
+            try:
+                async with aiomqtt.Client("localhost") as client:
+                    await client.publish(f"{update.effective_chat.id}/added_to_queue", payload=tracktitle)
+            except:
+                logging.error("Exception when publishing queue add to mqtt")
+                pass
+        
+
+            
         # return 
         return
         
@@ -1214,6 +1241,15 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 text=f"You paid {amount_to_pay} sats for {invoice_title}.")
         except:
             logging.info("Could not send message to user")
+
+            
+        try:
+            async with aiomqtt.Client("localhost") as client:
+                await client.publish(f"{update.effective_chat.id}/added_to_queue", payload=invoice_title)
+        except:
+            logging.error("Exception when publishing queue add to mqtt")
+            pass
+
             
         # make donation to the bot
         jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
