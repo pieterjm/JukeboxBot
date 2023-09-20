@@ -6,6 +6,8 @@ import random
 import string
 from time import time
 
+
+
 def init():
     global environment
     global rds

@@ -17,6 +17,7 @@ from telegramhelper import TelegramCommand
 import statshelper
 import qrcode
 from PIL import Image
+import asyncio_mqtt as aiomqtt
 
 import uvicorn
 from starlette.applications import Starlette
@@ -26,7 +27,6 @@ from starlette.routing import Route
 
 from telegram import __version__ as TG_VER
 
-# TODO: custom prijs toevoegen
 
 try:
     from telegram import __version_info__
@@ -1029,7 +1029,7 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
             # update the title
             if chat_id in now_playing_message:
                 [message_id, prev_title] = now_playing_message[chat_id]
-                if prev_title != title:
+                if prev_title != title:                    
                     try:
                         await context.bot.editMessageText(title,chat_id=chat_id,message_id=message_id)
                         now_playing_message[chat_id] = [ message_id, title ]
@@ -1037,6 +1037,14 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                     except:
                         logging.error("Exception when refreshing now playing")
                         pass
+
+                    try:
+                        async with aiomqtt.Client("localhost") as client:
+                            await client.publish(f"{chat_id}/now_playing", payload=title)
+                    except:
+                        logging.error("Exception when publishing current track to mqtt")
+                        pass
+
             else:
                 logging.info("Creating new pinned message")
                 try:
