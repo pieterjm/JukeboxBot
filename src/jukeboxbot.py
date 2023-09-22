@@ -326,7 +326,7 @@ To connect this bot to your spotify account, you have to create an app in the de
             ]))
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})
 
-        state = base64.b64encode(f"{update.effective_chat.id}:{update.effective_user.id}:{update.effective_chat.title}".encode('ascii')).decode('ascii')
+        state = base64.b64encode(f"{update.effective_chat.id}:{update.effective_user.id}".encode('ascii')).decode('ascii')
         
         # send a message to the private chat of the bot
         await context.bot.send_message(
@@ -1006,11 +1006,11 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
     interval = 300
     try:
         for key in settings.rds.scan_iter("group:*"):
-            logging.info(f"callback_spotify for group {key}")
+            #logging.info(f"callback_spotify for group {key}")
             chat_id = key.decode('utf-8').split(':')[1]
             auth_manager = await spotifyhelper.get_auth_manager(chat_id)
             if auth_manager is None:
-                logging.warning("Auth manager is None in callback_spotify")
+                #logging.warning("Auth manager is None in callback_spotify")
                 continue
 
             currenttrack = None
@@ -1018,7 +1018,7 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                 sp = spotipy.Spotify(auth_manager=auth_manager)
                 currenttrack = sp.current_user_playing_track()
             except:
-                logging.info("Exception while querying the current playing track at spotify")
+                #logging.info("Exception while querying the current playing track at spotify")
                 continue
             
             title = "Nothing playing at the moment"
@@ -1032,7 +1032,7 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                 if newinterval < interval:
                     interval = newinterval
             elif currenttrack is not None:
-              logging.info(json.dumps(currenttrack))
+                logging.info(json.dumps(currenttrack))
 
             # update the title
             if chat_id in now_playing_message:
@@ -1043,7 +1043,7 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                         now_playing_message[chat_id] = [ message_id, title ]
                         logging.info(f"Now playing {title} in chat {chat_id}")
                     except:
-                        logging.error("Exception when refreshing now playing")
+                        #logging.error("Exception when refreshing now playing")
                         pass
 
                     try:
@@ -1489,7 +1489,7 @@ async def main() -> None:
 
         try:
             state = base64.b64decode(state.encode('ascii')).decode('ascii')        
-            [chatid, userid, chatname] = state.split(':')
+            [chatid, userid] = state.split(':')
             chatid = int(chatid)            
             userid = int(userid)
         except:
@@ -1505,7 +1505,7 @@ async def main() -> None:
                 await userhelper.set_group_owner(chatid, userid)
                 await application.bot.send_message(
                     chat_id=userid,
-                    text=f"Spotify connected to the '{chatname}' chat. All revenues of requested tracks are coming your way. Execute the /decouple command in the group to remove the authorisation.")
+                    text=f"Spotify connected to the chat. All revenues of requested tracks are coming your way. Execute the /decouple command in the group to remove the authorisation.")
         except Exception as e:            
             logging.error(e)
             logging.error("Failure during auth_manager instantiation")
