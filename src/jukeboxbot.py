@@ -1435,6 +1435,20 @@ async def main() -> None:
   </div>
   <script src="/jukebox/assets/JukeboxBotInvoice.js"></script>
   <script src="https://unpkg.com/pay-with-ln@0.1.0/dist/pay-with-ln.js" integrity="sha384-Uid8n0M8dpAoE1SOQOXOcMfDy9hvqtSp+A3xMFilQn+Z6fxsnmCayPVP8na5vdAv" crossorigin="anonymous"></script>
+<script>                                                                                                                                        
+if(typeof window.webln !== 'undefined') {{
+      sendPayment();
+}}
+
+async function sendPayment() {{
+  try {{
+    await window.webln.enable();
+    await window.webln.sendPayment('{invoice.payment_request}');
+  }} catch (error) {{
+      alert("An error occurred during the payment.");
+  }}
+}}
+  </script>
 </body>
 </html>
 """)
