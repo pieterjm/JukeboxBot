@@ -187,7 +187,10 @@ async def get_spotify_settings(userid):
         sps.loadJson(data)
     return sps
 
-
+async def delete_chat(chat_id):
+    rediskey = f"group:{chat_id}"
+    settings.rds.delete(rediskey)
+    
 async def get_history(chat_id, maxlen):
     rediskey = f"history:{chat_id}"
     titles = []

@@ -18,6 +18,7 @@ import statshelper
 import qrcode
 from PIL import Image
 import asyncio_mqtt as aiomqtt
+from telegram.error import BadRequest, ChatMigrated
 
 import uvicorn
 from starlette.applications import Starlette
@@ -143,7 +144,7 @@ async def delete_message(context: ContextTypes.DEFAULT_TYPE):
 @debounce
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # send the message
-    message = await context.bot.send_message(chat_id=update.effective_chat.id,text=jukeboxtexts.help)
+    message = await context.bot.send_message(chat_id=update.effective_chat.id,text=jukeboxtexts.help,parse_mode=ParseMode.MARKDOWN)
 
     
     # only create a callback to delete the message when not in a private chat
@@ -991,8 +992,8 @@ async def regular_cleanup(context: ContextTypes.DEFAULT_TYPE) -> None:
     just empties the now playing list so that the callback_spotify function creates a new message
     """
     logging.info("Running regular clean up")
-    for chatid in list(now_playing_message.keys()):
-        del now_playing_message[chatid]
+#    for chatid in list(now_playing_message.keys()):
+#        del now_playing_message[chatid]
 
     telegramhelper.purge_commands()
 
@@ -1006,7 +1007,7 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
     interval = 300
     try:
         for key in settings.rds.scan_iter("group:*"):
-            #logging.info(f"callback_spotify for group {key}")
+            
             chat_id = key.decode('utf-8').split(':')[1]
             auth_manager = await spotifyhelper.get_auth_manager(chat_id)
             if auth_manager is None:
@@ -1020,6 +1021,8 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
             except:
                 #logging.info("Exception while querying the current playing track at spotify")
                 continue
+
+            #logging.info(f"callback_spotify for group {chat_id}")
             
             title = "Nothing playing at the moment"
             if currenttrack is not None and 'item' in currenttrack and currenttrack['item'] is not None:
@@ -1042,8 +1045,8 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                         await context.bot.editMessageText(title,chat_id=chat_id,message_id=message_id)
                         now_playing_message[chat_id] = [ message_id, title ]
                         logging.info(f"Now playing {title} in chat {chat_id}")
-                    except:
-                        #logging.error("Exception when refreshing now playing")
+                    except Exception as err:
+                        logging.error(f"Exception of type {type(err).__name__} when refresging now playing in chat {chat_id}")
                         pass
 
                     try:
@@ -1054,13 +1057,33 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                         pass
 
             else:
-                logging.info("Creating new pinned message")
+                logging.info(f"Creating new pinned message in chat: {chat_id}")
                 try:
                     message = await context.bot.send_message(text=title,chat_id=chat_id)
-                    await context.bot.pin_chat_message(chat_id=chat_id, message_id=message.id)
                     now_playing_message[chat_id] = [ message.id, title ]
+                except ChatMigrated as err:
+                    logging.info(f"Chat migrated from {chat_id} to {err.new_chat_id}. Deleting old settings")
+                    await spotifyhelper.delete_chat(chat_id)
+                    continue
+                except BadRequest as err:
+                    if err.message == "Chat not found":
+                        logging.info(f"Chat not found, deleting chat {chat_id}")
+                        await spotifyhelper.delete_chat(chat_id)
+                    elif err.message == "Not enough rights to send text messages to the chat":
+                        logging.info(f"Bot has insufficient privileges in chat {chat_id}")
+                        await spotifyhelper.delete_chat(chat_id)
+                    else:
+                        logging.error(f"BadRequest with unknown error message: {err.message}")
+                        
+                    continue
+                except Exception as e:
+                    logging.error(f"exception when sending message to chat {chat_id} of type {type(e).__name__}")
+                    continue
+                
+                try:
+                    await context.bot.pin_chat_message(chat_id=chat_id, message_id=message.id)
                 except:
-                    logging.error("Exception when sending message to group")
+                    logging.error("Exception when trying to pin message")
     except:
        logging.error("Unhandled exception in callback_spotify")             
     finally:

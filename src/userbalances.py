@@ -16,10 +16,11 @@ for userkey in settings.rds.scan_iter("user:*"):
 
         tgusername = userdata['telegram_username']
         tguserid = userdata['telegram_userid']
-
+        lnbits_userid = userdata['lnbits_userid']
+        
         user = asyncio.run(userhelper.get_or_create_user(tguserid, tgusername))
         balance = asyncio.run(userhelper.get_balance(user))
-        print(user.username, tguserid, balance)
+        print(user.username, tguserid, lnbits_userid, balance)
         total += balance
     else:
         print("got a none user")
