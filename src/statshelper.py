@@ -35,10 +35,21 @@ async def get_jukebox_groups() -> dict:
         except:
                 logging.error("problem getting group stats")
 
-
+        price = settings.rds.hget(key,"price")
+        if price is None:
+            price = settings.price
+        price = int(price)
+            
+        donation_fee = settings.rds.hget(key,"donation_fee")
+        if donation_fee is None:
+            donation_fee = settings.donation_fee
+        donation_fee = int(donation_fee)
+            
         result["group"].append({
             "groupid": chatid,
-            "owner": owner
+            "owner": owner,
+            "price": price,
+            "donation_fee": donation_fee
         })
 
 

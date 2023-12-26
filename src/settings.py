@@ -57,7 +57,7 @@ def init():
     # webserver port
     port = 7000
     
-    price = 21
+    price = 210
     fund_max = 42000
     fund_min = price
     rds = redis.Redis(db=2)

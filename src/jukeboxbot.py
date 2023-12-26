@@ -171,9 +171,12 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     statsText += f"Number of groups: {results['numgroups']}. List of owners: \n"
     for group in results['group']:
         if group['owner'] is not None:
-            statsText += f" - {group['groupid']} : @{group['owner'].username}\n"
+            statsText += f" - {group['groupid']} : @{group['owner'].username}"
         else:
-            statsText += f" - {group['groupid']} : Unknown owner\n"
+            statsText += f" - {group['groupid']} : Unknown owner"
+
+        statsText += f" price = {group['price']}, donation = {group['donation_fee']} \n"
+
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=statsText)
@@ -1045,8 +1048,15 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                         await context.bot.editMessageText(title,chat_id=chat_id,message_id=message_id)
                         now_playing_message[chat_id] = [ message_id, title ]
                         logging.info(f"Now playing {title} in chat {chat_id}")
+                    except BadRequest as err:
+                        if err.message == "Message to edit not found":
+                            logging.info("Now playing message not found, deleting from local cache")
+                            del now_playing_message[chatid]
+                        else:
+                            logging.error(f"BadRequest with unknown error message: {err.message}")                                               
+                        pass
                     except Exception as err:
-                        logging.error(f"Exception of type {type(err).__name__} when refresging now playing in chat {chat_id}")
+                        logging.error(f"Exception of type {type(err).__name__} when refreshing now playing in chat {chat_id}")
                         pass
 
                     try:
