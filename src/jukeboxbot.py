@@ -744,38 +744,41 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
         break
 
-    # create a list of max five buttons, each with a unique song title
-    if len(result['tracks']['items']) > 0:
-        tracktitles  = {}
-        button_list = []
-        for item in result['tracks']['items']:            
-            title = spotifyhelper.get_track_title(item)
-            if title not in tracktitles:
-                tracktitles[title] = 1
-                button_list.append([InlineKeyboardButton(title, callback_data = telegramhelper.add_command(TelegramCommand(update.effective_user.id,telegramhelper.add,item['uri'])))])
-                
-                # max five suggestions
-                if len(tracktitles) == 5:
-                    break
-
-        # Add a cancel button to the list
-        button_list.append([InlineKeyboardButton('Cancel', callback_data = telegramhelper.add_command(TelegramCommand(update.effective_user.id,telegramhelper.cancel,None)))])
-
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"Results for '{searchstr}'",
-            reply_markup=InlineKeyboardMarkup(button_list))
-
-        # start a job to kill the search window after 30 seconds if not used
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
-    else:
+    # abort when no results are returned
+    if len(result['tracks']['items']) == 0:
         message = await context.bot.send_message(chat_id=update.effective_chat.id,text=f"No results for '{searchstr}'")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})
+        return
 
+    # create a list of max five buttons, each with a unique song title
+    tracktitles  = {}
+    button_list = []
+    for item in result['tracks']['items']:            
+        title = spotifyhelper.get_track_title(item)
+        if title not in tracktitles:
+            tracktitles[title] = 1
+            button_list.append([InlineKeyboardButton(title, callback_data = telegramhelper.add_command(TelegramCommand(update.effective_user.id,telegramhelper.add,item['uri'])))])
+                
+            # max five suggestions
+            if len(tracktitles) == 5:
+                break
+
+    # Add a cancel button to the list
+    button_list.append([InlineKeyboardButton('Cancel', callback_data = telegramhelper.add_command(TelegramCommand(update.effective_user.id,telegramhelper.cancel,None)))])
+
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"Results for '{searchstr}'",
+        reply_markup=InlineKeyboardMarkup(button_list))
+
+    # start a job to kill the search window after 30 seconds if not used
+    context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})    
 
 # send sats from user to user
 @debounce
 async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+
     """
     Send sats from one user to another
     """
