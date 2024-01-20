@@ -72,6 +72,7 @@ class LNbits:
                     "wallet_name": name,
                     "user_name": name                    
                 })
+        logging.info(response.text)
         user = json.loads(response.text)
         return user['id']
 

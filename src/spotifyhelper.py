@@ -66,6 +66,21 @@ class CacheJukeboxHandler(CacheHandler):
         except RedisError as e:
             logging.warning('Error saving token to cache: ' + str(e))
 
+
+async def get_sp(chat_id):
+    auth_manager = await get_auth_manager(chat_id)
+    if auth_manager is None:
+        return None
+
+    # create spotify instance
+    try:
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+        return sp
+    except:
+        return None
+    
+
+
 def add_to_queue(sp, spotify_uri_list):
     """
     Add a list of tracks to the queue

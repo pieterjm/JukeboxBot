@@ -167,7 +167,7 @@ async def get_or_create_user(userid: int,username: str = None) -> User:
 
         # create if not existing
         if user.lnbitsuserid is None:
-            print("lnbitsuserid is None")
+            logging.info("user.lnbitsuserid == None, creating user in LNbits")
             user.lnbitsuserid = await settings.lnbits.createUser(user.rediskey)
 
         # get or create wallet if not existing
