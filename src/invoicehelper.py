@@ -22,6 +22,7 @@ class Invoice:
         self.title = None
         self.chat_id = None
         self.message_id = None
+        self.command = 'ADD'
         self.ttl = 300
     
     def toJson(self):
@@ -40,6 +41,7 @@ class Invoice:
             'spotify_uri_list': self.spotify_uri_list,
             'title': self.title,
             'chat_id': self.chat_id,
+            'command': self.command,
             'message_id': self.message_id
     
         }
@@ -66,10 +68,12 @@ class Invoice:
         self.title = data['title']
         self.chat_id = data['chat_id']
         self.message_id = data['message_id']
+        self.command = data['command']
 
 # Get/Create a QR code and store in filename
 async def create_invoice(user: User, amount: int, memo: str) -> Invoice:
     lnbits_invoice = await settings.lnbits.createInvoice(user.invoicekey,amount,memo, None)
+    logging.info(json.dumps(lnbits_invoice))
     invoice = Invoice(lnbits_invoice['payment_hash'],lnbits_invoice['payment_request'])
     return invoice
 
