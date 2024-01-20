@@ -1051,7 +1051,8 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                     except BadRequest as err:
                         if err.message == "Message to edit not found":
                             logging.info("Now playing message not found, deleting from local cache")
-                            del now_playing_message[chatid]
+                            del now_playing_message[chat_id]
+                            interval = 30
                         else:
                             logging.error(f"BadRequest with unknown error message: {err.message}")                                               
                         pass
@@ -1095,7 +1096,7 @@ async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
                 except:
                     logging.error("Exception when trying to pin message")
     except:
-       logging.error("Unhandled exception in callback_spotify")             
+       logging.error("Unhandled exception in callback_spotify")
     finally:
         if interval < 30 or interval > 300:
             interval = 30
