@@ -6,15 +6,15 @@ import base64
 import json
 from time import time
 import html
-import logging
 from dataclasses import dataclass
 from http import HTTPStatus
 import redis
 import random
+import logging
 import string
-import telegramhelper
-from telegramhelper import TelegramCommand
 import statshelper
+import telegramhelper
+from telegramhelper import TelegramCommand, adminonly, debounce, delete_message, send_telegram_message, group_chat_only, private_chat_only
 import qrcode
 from PIL import Image
 import asyncio_mqtt as aiomqtt
@@ -27,7 +27,6 @@ from starlette.responses import PlainTextResponse, Response, RedirectResponse, H
 from starlette.routing import Route
 
 from telegram import __version__ as TG_VER
-
 
 try:
     from telegram import __version_info__
@@ -44,13 +43,12 @@ if __version_info__ < (20, 0, 0, "alpha", 1):
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
-
 from telegram import (
     Update,
     InlineKeyboardMarkup,
     InlineKeyboardButton
 )
-from telegram.constants import ParseMode
+from telegram.constants import ParseMode 
 from telegram.ext import (
     Application,
     CallbackContext,
@@ -61,7 +59,8 @@ from telegram.ext import (
     CallbackQueryHandler,
     CallbackContext,
     MessageHandler,
-    filters    
+    filters,
+    PicklePersistence
 )
 
 # import all local stuff
@@ -78,89 +77,49 @@ from invoicehelper import Invoice
 jukeboxtexts.init()
 settings.init()
 
-# the local cache of messages that disply current playing track
-now_playing_message = {}
-
-# message debouncer to prevent processing the same message twice
-message_debounce = {}
-
-def adminonly(func):
-    """
-    This decorator function manages that only admin in a group chat are allowed to execute the function
-    """
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:        
-        admin = False
-        if update.message.chat.type == "private":
-            admin = True
-        else:
-            for member in await context.bot.get_chat_administrators(update.message.chat.id):
-                if member.user.id == update.effective_user.id and member.status in ['administrator','creator']:
-                    admin = True            
-        if admin == True:
-            await func(update, context)
-            return
-
-        # say to user to go away
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=jukeboxtexts.you_are_not_admin)
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})
+# add to local player
+def add_to_queue_or_upvote(uri, chat_id, amount):
+    if not isinstance(uri,str):
+        logging.error("uri is not a string")
         return
+    if not isinstance(amount,int):
+        logging.error("amount is not an integer")
+        return
+    
+    if not chat_id in application.bot_data:
+        application.bot_data[chat_id] = {}
+    if not 'queue' in application.bot_data[chat_id]:
+        application.bot_data[chat_id]['queue'] = {}
         
-
-            
-    return wrapper
-
-def debounce(func):
-    """
-    This decorator function manages the debouncing of message when executing commands
-    """
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        # debounce to prevent the same message being processed twice
-        if update.effective_chat.id in message_debounce and update.message.id <= message_debounce[update.effective_chat.id]:
-            logging.info("Message bounced")
-            return wrapper
-        else:
-            message_debounce[update.effective_chat.id] = update.message.id
-            await func(update, context)
-
-            # delete the command from the user
-            try:
-                await update.message.delete()
-            except:
-                logging.warning("Failed to delete message")
-            
-    return wrapper
-
-# delete telegram messages
-# This function is used in callbacks to enable the deletion of messages from users or the bot itself after some time
-async def delete_message(context: ContextTypes.DEFAULT_TYPE):
-    try:
-        await context.job.data['message'].delete()
-    except:
-        logging.warning("Could not delete message")
+    # upvote in the queue or add to queue
+    if uri in application.bot_data[chat_id]['queue']:
+        application.bot_data[chat_id]['queue'][uri] += amount
+    else:
+        application.bot_data[chat_id]['queue'][uri] = amount
         
+    # reorder the queue by highest paying amount
+    sorted_queue = sorted(application.bot_data[chat_id]['queue'].items(), key=lambda x:x[1], reverse=True)
+    
+    # store the queue
+    application.bot_data[chat_id]['queue'] = dict(sorted_queue)
+
 # start command handler, returns help information
 @debounce
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # send the message
-    message = await context.bot.send_message(chat_id=update.effective_chat.id,text=jukeboxtexts.help,parse_mode=ParseMode.MARKDOWN)
-
-    
-    # only create a callback to delete the message when not in a private chat
-    if update.message.chat.type != "private":
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
+    await send_telegram_message(
+        context=context,
+        chat_id=update.effective_chat.id,
+        text=jukeboxtexts.help,
+        delete_timeout=settings.delete_message_timeout_medium)
 
 # display stats
 @debounce
+@private_chat_only
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     userid: int = update.effective_user.id
 
-    if update.message.chat.type != "private":
-        return
-
     if userid not in settings.superadmins:
-        logging.info(f"User {userid} is not a superadmin. Access to stats denied")
         return
     
     results = await statshelper.get_jukebox_groups()
@@ -177,11 +136,55 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         statsText += f" price = {group['price']}, donation = {group['donation_fee']} \n"
 
+    await send_telegram_message(
+        context=context,
+        chat_id=update.effective_chat.id,
+        text=statsText,
+        delete_timeout=settings.delete_message_timeout_long)
+
+@debounce
+@adminonly
+@private_chat_only
+async def service(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    This command sends a service message to all Jukebot group owners, that is all users marked as owner of a group
+    """
+    userid: int = update.effective_user.id
+
+    if userid not in settings.superadmins:
+        logging.info(f"User {userid} is not a superadmin. Access to stats denied")
+        return
+
+    result = re.search("^/service \S.*",update.message.text)
+    if result is None:
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Use the /service command as follows: /service <message>\nThe message is sent to all owners of bot")
+        return
+
+    # set message, strip the command
+    msgstr = update.message.text[9:]
+
+    results = await statshelper.get_jukebox_groups()
+    num = 0
+    for group in results['group']:
+        # skip if no owner is set
+        if group['owner'] is None:
+            continue
+
+        # send a message each owner
+        try:
+            message = await context.bot.send_message(
+                chat_id=group['owner'].userid,
+                text=f"Service message from the Jukebox Bot:\n\n{msgstr}\n\nThank you!")
+            num += 1
+        except:
+            pass
+
+    # send a message each owner
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=statsText)
-    
-
+        text=f"The following message was sent to {num} users:\n\nService message from the Jukebox Bot:\n\n{msgstr}\n\nThank you!")
 
 # get the current balance
 @debounce
@@ -191,14 +194,14 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         bot_me = await context.bot.get_me()
         
         # direct the user to their private chat
-        message = await context.bot.send_message(
+        await send_telegram_message(
+            context=context,
             chat_id=update.effective_chat.id,
             text=jukeboxtexts.balance_in_group,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"Take me there",url=f"https://t.me/{bot_me.username}")]
-            ]))
-
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
+            ]),
+            delete_timeout=settings.delete_message_timeout_medium)
         return
 
     # we're in a private chat now
@@ -209,26 +212,121 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     # create a message with the balance
     logging.info(f"User {user.userid} balance is {balance} sats")
-    message = await context.bot.send_message(
+    await send_telegram_message(
+        context=context,
         chat_id=update.effective_chat.id,
         text=f"Your balance is {balance} sats.")
 
+# display the play queue
+@debounce
+@adminonly
+@group_chat_only
+async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    price = await spotifyhelper.get_price(update.effective_chat.id)
+    donation = await spotifyhelper.get_donation_fee(update.effective_chat.id)
+    
+    if update.message.text == '/price':
+        await send_telegram_message(
+            context=context,
+            chat_id=update.effective_chat.id,
+            parse_mode='HTML',
+            text=f"Current track price is {price}. Per requested track, {donation} sats is donated to the Jukebox Bot.",
+            delete_timeout=settings.delete_message_timeout_short
+        )
+        return
 
+    # parse and validate the price command
+    result = re.search("/price\s+([0-9]+)\s+([0-9]+)$",update.message.text)
+    if result is None:
+        await send_telegram_message(
+            context=context,
+            chat_id=update.effective_chat.id,
+            parse_mode='HTML',
+            text="Use command as follows: /price &lt;price&gt; &lt;donation&gt;\n&lt;price&gt; is the track price in sats\n&lt;donation&gt; is the amount in sats donated to the bot per reqested track. The donation is substracted from the track price.",
+            delete_timeout=settings.delete_message_timeout_medium
+        )
+        return
+
+    newprice = int(result.groups()[0])
+    newdonation = int(result.groups()[1])
+
+    if newdonation > newprice:
+        newdonation = newprice
+
+    # update 
+    await spotifyhelper.set_price(update.effective_chat.id, newprice)
+    await spotifyhelper.set_donation_fee(update.effective_chat.id, newdonation)
+        
+    await send_telegram_message(
+        context=context,
+        chat_id=update.effective_chat.id,
+        text=f"Updating price to {newprice} sats. Donation amount is {newdonation} sats.",
+        delete_timeout=settings.delete_message_timeout_medium)
+
+def create_queue_button_list(context, sp, chat_id: int):
+    button_list = []
+    count = 1
+    for uri in context.bot_data[chat_id]['queue']:
+        amount = context.bot_data[chat_id]['queue'][uri]
+        if amount > 100000000 - 1:
+            qtitle = f"Up next: {spotifyhelper.get_track_title(sp.track(uri))}"        
+            button_list.append([
+                InlineKeyboardButton(qtitle, callback_data = 0)
+            ])
+        else:
+            qtitle = f"{count}. {spotifyhelper.get_track_title(sp.track(uri))} ({amount} sats)"        
+            button_list.append([
+                InlineKeyboardButton(qtitle, callback_data = telegramhelper.add_command(TelegramCommand(0,telegramhelper.upvote,uri)))
+            ])
+            
+        count += 1
+    return button_list    
+
+# display the play queue
+@debounce
+@group_chat_only
+#(message="Execute the /queue command in the group instead of the private chat.")
+async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # get an auth managher, if no auth manager is available, dump a message
+    sp = await spotifyhelper.get_sp(update.effective_chat.id)
+    if not sp:
+        await send_telegram_message(
+            context=context,
+            chat_id=update.effective_chat.id,
+            text="Could not obtain player instance",
+            delete_timeout=settings.delete_message_timeout_short)
+        return
+    
+    # get the current track
+    try:
+        track = sp.current_user_playing_track()
+    except:
+        track = None
+
+    title = "Nothing is playing at the moment"    
+    if track:                    
+        title = "🎵 {title} 🎵".format(title=spotifyhelper.get_track_title(track['item']))
+
+    title += "\n\nUse the /add command to add your favourite track to the queue, or click on a track to pump it to the top of the queue."
+
+    if len(context.bot_data[update.effective_chat.id]['queue']) == 0:
+        title += "\nRequest queue is empty."
+
+    await send_telegram_message(
+        context=context,
+        chat_id=update.effective_chat.id,
+        text=title,
+        reply_markup=InlineKeyboardMarkup(create_queue_button_list(context, sp, update.effective_chat.id)),
+        delete_timeout=settings.delete_message_timeout_medium
+    )
+
+
+    
 # Disconnect a spotify player from the bot, the connect command
 @debounce
 @adminonly
+@group_chat_only
 async def disconnect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # this command can only be used in group chats, send instructions if used in a private chat
-    if update.message.chat.type == "private":
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            parse_mode='HTML',
-            text=jukeboxtexts.disconnect_in_private_chat)
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})        
-
-        # stop here
-        return
-
     # delete the owner of the group, all admins can do this
     await userhelper.delete_group_owner(update.effective_chat.id)
     result = await spotifyhelper.delete_auth_manager(update.effective_chat.id)
@@ -256,7 +354,6 @@ async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     # this command has to be execute from within a group
     if update.message.chat.type == "private":
-
         await context.bot.send_message(
             chat_id=update.effective_user.id,
             parse_mode='HTML',
@@ -351,178 +448,10 @@ To connect this bot to your spotify account, you have to create an app in the de
             
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
 
-
-# display the play queue
-@debounce
-@adminonly
-async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message.chat.type == "private":
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"The /price command only works in a group chat.")
-        return
-
-    price = await spotifyhelper.get_price(update.effective_chat.id)
-    donation = await spotifyhelper.get_donation_fee(update.effective_chat.id)
-    
-    if update.message.text == '/price':
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            parse_mode='HTML',
-            text=f"Current track price is {price}. Per requested track, {donation} sats is donated to the Jukebox Bot.")
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
-        return
-
-
-    # parse and validate the price command
-    result = re.search("/price\s+([0-9]+)\s+([0-9]+)$",update.message.text)
-    if result is None:
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"Use command as follows: /price <price> <donation>\n<price> is the track price in sats\n<donation> is the amount in sats donated to the bot per reqested track. The donation is substracted from the track price.")
-        return
-
-    newprice = int(result.groups()[0])
-    newdonation = int(result.groups()[1])
-
-    if newdonation > newprice:
-        newdonation = newprice
-
-    # update 
-    await spotifyhelper.set_price(update.effective_chat.id, newprice)
-    await spotifyhelper.set_donation_fee(update.effective_chat.id, newdonation)
-        
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"Updating price to {newprice} sats. Donation amount is {newdonation} sats.")
-    
-    context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':update.message})
-
-# display the play queue
-@debounce
-async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message.chat.type == "private":
-        message = await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=f"Execute the /queue command in the group instead of the private chat.")
-        return
-    
-    # get an auth managher, if no auth manager is available, dump a message
-    auth_manager = await spotifyhelper.get_auth_manager(update.effective_chat.id)
-    if auth_manager is None:
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            parse_mode='HTML',
-            text="Bot not connected to player. The admin should perform the /couple command to authorize the bot.")
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
-        return
-
-    # create spotify instance
-    try:
-        sp = spotipy.Spotify(auth_manager=auth_manager)
-    except:
-        message = await context.bot.send_message(chat_id=update.effective_chat.id,text="Failed to connect to music player")    
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
-        return
-    
-    # get the current track
-    try:
-        track = sp.current_user_playing_track()
-    except:
-        track = None
-        
-    title = "Nothing is playing at the moment"    
-    if track:                    
-        title = "🎵 {title} 🎵".format(title=spotifyhelper.get_track_title(track['item']))
-    
-    # query the queue
-    try:
-        result = sp.queue()
-    except:
-        message = await context.bot.send_message(chat_id=update.effective_chat.id,text="Failed to retrieve queue")    
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
-        return
-        
-    text = ""
-    for i in range(min(10,len(result['queue']))):
-        item = result['queue'][i]       
-        text += " {count}. {title}\n".format(count=(i+1),title=spotifyhelper.get_track_title(item))
-
-    if len(text) == 0:
-        text = title + "\nNo items in queue."
-    else:
-        text = title + "\nUpcoming tracks:\n" + text
-            
-    message = await context.bot.send_message(chat_id=update.effective_chat.id,text=text)    
-    context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
-
-@debounce
-@adminonly
-async def service(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    This command sends a service message to all Jukebot group owners, that is all users marked as owner of a group
-    """
-    userid: int = update.effective_user.id
-
-    if update.message.chat.type != "private":
-        return
-
-    if userid not in settings.superadmins:
-        logging.info(f"User {userid} is not a superadmin. Access to stats denied")
-        return
-
-    result = re.search("^/service \S.*",update.message.text)
-    if result is None:
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"Use the /service command as follows: /service <message>\nThe message is sent to all owners of bot")
-        return
-
-    # set message, strip the command
-    msgstr = update.message.text[9:]
-
-    results = await statshelper.get_jukebox_groups()
-    num = 0
-    for group in results['group']:
-        # skip if no owner is set
-        if group['owner'] is None:
-            continue
-
-        # send a message each owner
-        try:
-            message = await context.bot.send_message(
-                chat_id=group['owner'].userid,
-                text=f"Service message from the Jukebox Bot:\n\n{msgstr}\n\nThank you!")
-            num += 1
-        except:
-            pass
-
-    # send a message each owner
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"The following message was sent to {num} users:\n\nService message from the Jukebox Bot:\n\n{msgstr}\n\nThank you!")
-
-            
-    
-    
-    
 # connect a spotify player to the bot, the setclient secret and set client id commands
 @debounce
+@private_chat_only
 async def spotify_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message.chat.type != "private":
-        bot_me = await context.bot.get_me()
-               
-        # direct the user to their private chat
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="Like keeping your mnenomic seedphrase offline, it is better to perform these actions in a private chat with me.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"Take me there",url=f"https://t.me/{bot_me.username}")]
-            ]))
-
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
-        return
-    
     # get spotify settings for the user
     sps = await spotifyhelper.get_spotify_settings(update.effective_user.id)
 
@@ -572,26 +501,17 @@ async def fund(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # view the history of recently played tracks
 @debounce
+@group_chat_only
 async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-
-    if update.message.chat.type == "private":
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"Execute the /history command in the group instead of the private chat.")
-        return
-    
     # get an auth managher, if no auth manager is available, dump a message
-    auth_manager = await spotifyhelper.get_auth_manager(update.effective_chat.id)
-    if auth_manager is None:
-        message = await context.bot.send_message(
+    sp = await spotifyhelper.get_sp(update.effective_chat.id)
+    if not sp:
+        await send_telegram_message(
+            context=context,
             chat_id=update.effective_chat.id,
-            parse_mode='HTML',
-            text="Bot not connected to player. The admin should perform the /couple command to authorize the bot.")
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
+            text="Could not obtain player instance",
+            delete_timeout=settings.delete_message_timeout_short)
         return
-
-    # create spotify instance
-    sp = spotipy.Spotify(auth_manager=auth_manager)
         
     text = "Track history:\n"
     history = await spotifyhelper.get_history(update.effective_chat.id,20)
@@ -603,21 +523,8 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
 # get lndhub link for user
 @debounce
+@private_chat_only
 async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # create a message tyo do this in a private chat
-    if update.message.chat.type != "private":
-        bot_me = await context.bot.get_me()
-    
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="Like keeping your mnenomic seedphrase offline, it is better to request your lndhub link in a private chat with me.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"Take me there",url=f"https://t.me/{bot_me.username}")]
-            ]))
-
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
-        return
-
     # we're in a private chat now
     user = await userhelper.get_or_create_user(update.effective_user.id,update.effective_user.username)
 
@@ -667,6 +574,7 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # search for a track
 @debounce
+@group_chat_only
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     This function searches for tracks in spotify and createas a list of tracks to play
@@ -674,24 +582,16 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     This function only works in a group chat
     """
     
-    if update.message.chat.type == "private":
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"Execute the /add command in the group instead of the private chat.")
-        return
-    
     # get an auth manager, if no auth manager is available, dump a message
-    auth_manager = await spotifyhelper.get_auth_manager(update.effective_chat.id)
-    if auth_manager is None:
-        await context.bot.send_message(
+    sp = await spotifyhelper.get_sp(update.effective_chat.id)
+    if not sp:
+        await send_telegram_message(
+            context=context,
             chat_id=update.effective_chat.id,
-            parse_mode='HTML',
-            text="Bot not connected to player. The admin should perform the /couple command to authorize the bot.")
+            text="Could not obtain player instance",
+            delete_timeout=settings.delete_message_timeout_short)
         return
 
-    # create spotify instance
-    sp = spotipy.Spotify(auth_manager=auth_manager)
-    
     # validate the search string
     searchstr = update.message.text.split(' ',1)
     if len(searchstr) > 1:
@@ -706,15 +606,17 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if (match):
         playlistid = match.groups()[0]
         result = sp.playlist(playlistid,fields=['name'])
-        message = await context.bot.send_message(
+
+        await send_telegram_message(
+            context=context,
             chat_id=update.effective_chat.id,
             text=f"@{update.effective_user.username} suggests to play tracks from the '{result['name']}' playlist.",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton(f"Pay {await spotifyhelper.get_price(update.effective_chat.id)} sats for a random track", callback_data = telegramhelper.add_command(TelegramCommand(0,telegramhelper.playrandom,playlistid)))
-            ]]))
+            ]]),
+            delete_timeout=settings.delete_message_timeout_long)
 
-        # start a job to kill the message  after 30 seconds if not used
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_long, data={'message':message})
+        # exit this function
         return
 
     # search for tracks
@@ -761,18 +663,20 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # Add a cancel button to the list
         button_list.append([InlineKeyboardButton('Cancel', callback_data = telegramhelper.add_command(TelegramCommand(update.effective_user.id,telegramhelper.cancel,None)))])
 
-        message = await context.bot.send_message(
+        
+        await send_telegram_message(
+            context=context,
             chat_id=update.effective_chat.id,
             text=f"Results for '{searchstr}'",
-            reply_markup=InlineKeyboardMarkup(button_list))
-
-        # start a job to kill the search window after 30 seconds if not used
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
+            reply_markup=InlineKeyboardMarkup(button_list),
+            delete_timeout=settings.delete_message_timeout_medium)
     else:
-        message = await context.bot.send_message(chat_id=update.effective_chat.id,text=f"No results for '{searchstr}'")
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})
-
-
+        await send_telegrame_message(
+            context=context,
+            chat_id=update.effective_chat.id,
+            text=f"No results for '{searchstr}'",
+            delete_timeout=settings.delete_message_timeout_short)
+        
 # send sats from user to user
 @debounce
 async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -851,7 +755,7 @@ async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=update.effective_chat.id,
             text=f'Payment failed. Sorry.')
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
-
+    
 async def callback_paid_invoice(invoice: Invoice):
     if invoice is None:
         logging.error("Invoice is None")
@@ -866,48 +770,44 @@ async def callback_paid_invoice(invoice: Invoice):
     if await invoicehelper.delete_invoice(invoice.payment_hash) == False:
         logging.info("invoicehelper.delete_invoice returned False")
         return
-
-    
-    auth_manager = await spotifyhelper.get_auth_manager(invoice.chat_id)
-    if auth_manager is None:
-        logging.error("No auth manager after succesfull payment")
-        return
-
-
-    
     try:
         logging.info(f"Trying to delete chat_id {invoice.chat_id}, messageid {invoice.message_id}")
         await application.bot.delete_message(invoice.chat_id,invoice.message_id)            
     except:
         pass
 
-
-    # add to the queue and inform others
-    sp = spotipy.Spotify(auth_manager=auth_manager)
+    sp = await spotifyhelper.get_sp(invoice.chat_id)
+    if not sp:
+        await send_telegram_message(
+            context=context,
+            chat_id=invoice.chat_id,
+            text="Could not obtain player instance",
+            delete_timeout=settings.delete_message_timeout_short)
+        return
     
-    spotifyhelper.add_to_queue(sp, invoice.spotify_uri_list)
+    # change this if it is an upvote
+    add_to_queue_or_upvote(invoice.spotify_uri_list[0],invoice.chat_id,invoice.amount_to_pay)
+    
     try:
-        await application.bot.send_message(
+        message = f"'{invoice.title}' was added to the queue."        
+        if invoice.command == telegramhelper.upvote:
+            f"'{invoice.title}' was pumped with {invoice.amount_to_pay} sats."
+
+        await send_telegram_message(
+            context=application,
             chat_id=invoice.chat_id,
             parse_mode='HTML',
-            text=f"'{invoice.title}' was added to the queue.")
+            text=message)
     except:
-        logging.error("Could not  send message to the group that track was added to the queue")
+        logging.error("Could not  send message to the group that track was added to the /queue")
     
-    try:
-        async with aiomqtt.Client("localhost") as client:
-            await client.publish(f"{invoice.chat_id}/added_to_queue", payload=invoice.title)
-    except:
-        logging.error("Exception when publishing queue add to mqtt")
-        pass
-        
 
     if False:
         try:
             await application.bot.send_message(
                 chat_id=invoice.user.userid,
                 parse_mode='HTML',
-                text=f"You paid {invoice.amount_to_pay} sats for {invoice.title}.")
+                text=f"You paid {invoice.amount_to_pay} sats for '{invoice.title}'.")
         except:
             logging.info("Could not send individual message to user that")
     
@@ -916,11 +816,9 @@ async def callback_paid_invoice(invoice: Invoice):
     donator = await userhelper.get_or_create_user(invoice.recipient.userid)
     donation_amount : int = await spotifyhelper.get_donation_fee(invoice.chat_id)
     donation_amount = min(donation_amount,invoice.amount_to_pay)
-    donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
-    result = await invoicehelper.pay_invoice(donator, donation_invoice)
-
-    return
-
+    if donation_amount > 0:
+        donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
+        result = await invoicehelper.pay_invoice(donator, donation_invoice)
 
 @debounce
 async def web(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1000,109 +898,149 @@ async def regular_cleanup(context: ContextTypes.DEFAULT_TYPE) -> None:
 
     telegramhelper.purge_commands()
 
-
-async def callback_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    This function creates a message of the current playing track. It reschedules itself depending on the remaining time
-    for the current playing track. Basically two seconds after the time, the first track has finished playing
+    Callback function that updates the nowplaying track and 
+    plans the callback for updating the queue
     """
+    chat_id = int(context.job.data)
+    logging.info(f"Callback now playing for chat: {chat_id}")
 
+    # default interval
     interval = 300
+
+
     try:
-        for key in settings.rds.scan_iter("group:*"):
-            
-            chat_id = key.decode('utf-8').split(':')[1]
-            auth_manager = await spotifyhelper.get_auth_manager(chat_id)
-            if auth_manager is None:
-                #logging.warning("Auth manager is None in callback_spotify")
-                continue
+        sp = await spotifyhelper.get_sp(chat_id)
+        if not sp:            
+            logging.error("No auth manager after succesfull payment")
+            raise
+    
 
-            currenttrack = None
-            try:
-                sp = spotipy.Spotify(auth_manager=auth_manager)
-                currenttrack = sp.current_user_playing_track()
-            except:
-                #logging.info("Exception while querying the current playing track at spotify")
-                continue
+        # query the current track
+        currenttrack = None
+        currenttrack = sp.current_user_playing_track()
+        
+        # query the current track
+        title = "Nothing playing at the moment"
+        if currenttrack is not None and 'item' in currenttrack and currenttrack['item'] is not None:
+            title = spotifyhelper.get_track_title(currenttrack['item'])
+        
+            # update history
+            await spotifyhelper.update_history(chat_id, title)                
 
-            #logging.info(f"callback_spotify for group {chat_id}")
-            
-            title = "Nothing playing at the moment"
-            if currenttrack is not None and 'item' in currenttrack and currenttrack['item'] is not None:
-                title = spotifyhelper.get_track_title(currenttrack['item'])
+            # update interval when to update now playing message
+            interval  = ( currenttrack['item']['duration_ms'] - currenttrack['progress_ms'] ) / 1000
 
-                # update history
-                await spotifyhelper.update_history(chat_id, title)
+            # if now playing is next in the player queue, remove from local queue
+            if len(application.bot_data[chat_id]['queue']) > 0:
+                next_in_queue_uri = list(application.bot_data[int(chat_id)]['queue'].keys())[0]                        
+                if next_in_queue_uri == currenttrack['item']['uri']:
+                    logging.info("First track in queue is now playing, removing from queue")
+                    application.bot_data[int(chat_id)]['queue'].pop(next_in_queue_uri)
 
-                newinterval  = ( currenttrack['item']['duration_ms'] - currenttrack['progress_ms'] ) / 1000 + 2
-                if newinterval < interval:
-                    interval = newinterval
-            elif currenttrack is not None:
-                logging.info(json.dumps(currenttrack))
-
-            # update the title
-            if chat_id in now_playing_message:
-                [message_id, prev_title] = now_playing_message[chat_id]
-                if prev_title != title:                    
-                    try:
-                        await context.bot.editMessageText(title,chat_id=chat_id,message_id=message_id)
-                        now_playing_message[chat_id] = [ message_id, title ]
-                        logging.info(f"Now playing {title} in chat {chat_id}")
-                    except BadRequest as err:
-                        if err.message == "Message to edit not found":
-                            logging.info("Now playing message not found, deleting from local cache")
-                            del now_playing_message[chat_id]
-                            interval = 30
-                        else:
-                            logging.error(f"BadRequest with unknown error message: {err.message}")                                               
-                        pass
-                    except Exception as err:
-                        logging.error(f"Exception of type {type(err).__name__} when refreshing now playing in chat {chat_id}")
-                        pass
-
-                    try:
-                        async with aiomqtt.Client("localhost") as client:
-                            await client.publish(f"{chat_id}/now_playing", payload=title)
-                    except:
-                        logging.error("Exception when publishing current track to mqtt")
-                        pass
-
-            else:
-                logging.info(f"Creating new pinned message in chat: {chat_id}")
-                try:
-                    message = await context.bot.send_message(text=title,chat_id=chat_id)
-                    now_playing_message[chat_id] = [ message.id, title ]
-                except ChatMigrated as err:
-                    logging.info(f"Chat migrated from {chat_id} to {err.new_chat_id}. Deleting old settings")
-                    await spotifyhelper.delete_chat(chat_id)
-                    continue
-                except BadRequest as err:
-                    if err.message == "Chat not found":
-                        logging.info(f"Chat not found, deleting chat {chat_id}")
-                        await spotifyhelper.delete_chat(chat_id)
-                    elif err.message == "Not enough rights to send text messages to the chat":
-                        logging.info(f"Bot has insufficient privileges in chat {chat_id}")
-                        await spotifyhelper.delete_chat(chat_id)
-                    else:
-                        logging.error(f"BadRequest with unknown error message: {err.message}")
-                        
-                    continue
-                except Exception as e:
-                    logging.error(f"exception when sending message to chat {chat_id} of type {type(e).__name__}")
-                    continue
+        # update title
+        if not chat_id in application.bot_data:
+            application.bot_data[chat_id] = {}
                 
-                try:
-                    await context.bot.pin_chat_message(chat_id=chat_id, message_id=message.id)
-                except:
-                    logging.error("Exception when trying to pin message")
+        if 'now_playing_message' in application.bot_data[chat_id]:
+            try:
+                [message_id, prev_title] = application.bot_data[chat_id]['now_playing_message']
+                if prev_title != title:                    
+                    await context.bot.editMessageText(title,chat_id=chat_id,message_id=message_id)
+                    application.bot_data[chat_id]['now_playing_message'] = [ message_id, title ]
+                    logging.info(f"Now playing {title} in chat {chat_id}")
+            except BadRequest as err:
+                if err.message == "Message to edit not found":
+                    logging.info("Now playing message not found, deleting from local cache")
+                    del application.bot_data[chat_id]['now_playing_message']
+                    interval = 30
+                else:
+                    logging.error(f"BadRequest with unknown error message: {err.message}")                                               
+            except Exception as err:
+                logging.error(f"Exception of type {type(err).__name__} when refreshing now playing in chat {chat_id}")                
+        else:
+            logging.info(f"Creating new pinned message in chat: {chat_id}")
+            try:
+                message = await context.bot.send_message(text=title,chat_id=chat_id)
+                application.bot_data[chat_id]['now_playing_message'] = [ message.id, title ]
+                await context.bot.pin_chat_message(chat_id=chat_id, message_id=message.id)
+            except ChatMigrated as err:
+                logging.info(f"Chat migrated from {chat_id} to {err.new_chat_id}. Deleting old settings")
+                await spotifyhelper.delete_chat(chat_id)
+            except BadRequest as err:
+                if err.message == "Chat not found":
+                    logging.info(f"Chat not found, deleting chat {chat_id}")
+                    await spotifyhelper.delete_chat(chat_id)
+                elif err.message == "Not enough rights to send text messages to the chat":
+                    logging.info(f"Bot has insufficient privileges in chat {chat_id}")
+                    await spotifyhelper.delete_chat(chat_id)
+                else:
+                    logging.error(f"BadRequest with unknown error message: {err.message}")                                       
+            except Exception as e:
+                logging.error(f"exception when sending message to chat {chat_id} of type {type(e).__name__}")                            
+                
     except:
-       logging.error("Unhandled exception in callback_spotify")
+        logging.error("Unhandled exception in callback_now_playing")
     finally:
-        if interval < 30 or interval > 300:
-            interval = 30
         logging.info(f"Next run in {interval} seconds")
-        context.job_queue.run_once(callback_spotify, interval, job_kwargs = {'misfire_grace_time':None})
-                                                               
+        context.job_queue.run_once(callback_now_playing, interval + 5, data=chat_id, job_kwargs = {'misfire_grace_time':None})
+        context.job_queue.run_once(callback_manage_queue, interval - 10, data=chat_id, job_kwargs = {'misfire_grace_time':None})
+    
+            
+async def callback_manage_queue(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    callback function that adds tracks from the local queue to the spotify queue
+    """
+    chat_id = int(context.job.data)
+    interval = 300
+    
+    logging.info(f"Callback manage queue for chat: {chat_id}")
+
+    try:
+        # get the auth manager
+        sp = await spotifyhelper.get_sp(chat_id)
+        if not sp:
+            raise
+
+        # query the current track
+        currenttrack = sp.current_user_playing_track()
+
+        # add next track to the player queue
+        if len(application.bot_data[chat_id]['queue']) > 0:
+            next_in_queue_uri = list(application.bot_data[int(chat_id)]['queue'].keys())[0]                        
+            result = sp.queue()
+
+            bFound = False
+            for i in range(min(5,len(result['queue']))):                           
+                next_spotify_uri = result['queue'][i]['uri']
+                if next_spotify_uri == next_in_queue_uri:
+                    bFound = True
+
+            if bFound == False:
+                logging.info(f"Adding next in queue {next_in_queue_uri} to sp queue")
+                sp.add_to_queue(next_in_queue_uri)
+                # it is better not to remove
+                # we could increase the amount of the top song to a ridiculous amount to prevent overtaking
+                add_to_queue_or_upvote(next_in_queue_uri, chat_id, 100000000)
+                #application.bot_data[int(chat_id)]['queue'].pop(next_in_queue_uri)
+
+    except:
+        logging.error("Unhandled exception in callback_manage_queue")
+        
+async def startup_spotify(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    This function starts up the jobs that monitor the current ]playing track in spotify and manage the play queue
+    """
+    for key in settings.rds.scan_iter("group:*"):
+        chat_id = int(key.decode('utf-8').split(':')[1])
+
+        
+        context.job_queue.run_once(callback_now_playing, 2, data=chat_id, job_kwargs = {'misfire_grace_time':None})
+
+
+        
+        
         
 #callback for button presses
 async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1142,29 +1080,20 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.callback_query.delete_message()
         return
     
-    if command.command == telegramhelper.cancelinvoice:
+    elif command.command == telegramhelper.cancelinvoice:
         await update.callback_query.delete_message()
 
         invoice = command.data
         if invoice is not None:
             await invoicehelper.delete_invoice(invoice.payment_hash)
-        return
-
+        return    
 
     # the commands from here on modify a list of tracks to be queue
     # and we have to check hat we have spotify available
-    # get an auth managher, if no auth manager is available, dump a message    
-    auth_manager = await spotifyhelper.get_auth_manager(update.effective_chat.id)
-    if auth_manager is None:
-        message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            parse_mode='HTML',
-            text="Bot not connected to player. The admin should perform the /couple command to authorize the bot.")
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
+    # get an auth managher, if no auth manager is available, dump a message
+    sp = await spotifyhelper.get_sp(update.effective_chat.id)
+    if not sp:
         return
-
-    # create spotify instance
-    sp = spotipy.Spotify(auth_manager=auth_manager)
 
     # verify that player is available, otherwise it has no use to queue a track
     track = sp.current_user_playing_track()
@@ -1175,8 +1104,11 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             text="Player is not active at the moment. Payment aborted.")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})        
         return
-    
-                      
+
+
+    # get the track price
+    track_price = int(await spotifyhelper.get_price(update.effective_chat.id))
+                                            
     # Play a random track from a playlist
     spotify_uri_list = []          
     if  command.command == telegramhelper.add:
@@ -1190,31 +1122,45 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         for idx in idxs:    
             result = sp.playlist_items(playlistid,offset=idx,limit=1)
             for item in result['items']:
-                spotify_uri_list.append(item['track']['uri'])                
+                spotify_uri_list.append(item['track']['uri'])
+    elif command.command == telegramhelper.upvote:
+        spotify_uri_list = [command.data]
+        logging.info(f"Upvote of {command.data}")
     else:
         logging.error(f"Unknown command: {command.command}")
         return
 
     # validate payment conditions
     payment_required = True
-    amount_to_pay = int((await spotifyhelper.get_price(update.effective_chat.id)) * len(spotify_uri_list))    
+    amount_to_pay = int(track_price * len(spotify_uri_list))
     logging.info(f"Amount to pay = {amount_to_pay}")
     if amount_to_pay == 0:
         payment_required = False
             
     # if no payment required, add the tracks to the queue one by one
     if payment_required == False:
-        spotifyhelper.add_to_queue(sp, spotify_uri_list)
+        # TODO: change this if it is an upvote
+        #spotifyhelper.add_to_queue(sp, spotify_uri_list)
+        add_to_queue_or_upvote(spotify_uri_list[0],update.effective_chat.id,0)
+        
 
         for uri in spotify_uri_list:
 
             tracktitle = spotifyhelper.get_track_title(sp.track(uri))
             
             try:
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    parse_mode='HTML',
-                    text=f"@{update.effective_user.username} added '{tracktitle}' to the queue.")
+                if command.command == telegramhelper.upvote:
+                    await update.callback_query.edit_message_reply_markup(InlineKeyboardMarkup(create_queue_button_list(context, sp, update.effective_chat.id)))
+             
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        parse_mode='HTML',
+                        text=f"@{update.effective_user.username} pumped '{tracktitle}' to {int(application.bot_data[update.effective_chat.id]['queue'][uri])} sats.")
+                else:
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        parse_mode='HTML',
+                        text=f"@{update.effective_user.username} added '{tracktitle}' to the /queue.")
             except:
                 pass
 
@@ -1222,7 +1168,7 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 await context.bot.send_message(
                     chat_id=update.effective_user.id,
                     parse_mode='HTML',
-                    text=f"You added '{tracktitle}' to the queue for {amount_to_pay} sats.")
+                    text=f"You paid {amount_to_pay} sats for  '{tracktitle}'.")
             except:
                 pass
 
@@ -1257,17 +1203,34 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     invoice.title = invoice_title
     invoice.chat_id = update.effective_chat.id
     invoice.amount_to_pay = amount_to_pay
+    if command.command == telegramhelper.upvote:
+        invoice.command = telegramhelper.upvote
 
     # pay the invoice
     payment_result = await invoicehelper.pay_invoice(invoice.user, invoice)
 
     # if payment success
     if payment_result['result'] == True:
-        spotifyhelper.add_to_queue(sp, spotify_uri_list)
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            parse_mode='HTML',
-            text=f"@{update.effective_user.username} added {invoice_title} to the queue.")
+        # TODO: change this if it is an upvote        
+        #spotifyhelper.add_to_queue(sp, spotify_uri_list)
+        add_to_queue_or_upvote(invoice.spotify_uri_list[0],invoice.chat_id,invoice.amount_to_pay)
+
+        if invoice.command == telegramhelper.upvote:
+            # update the queue message
+            await update.callback_query.edit_message_reply_markup(InlineKeyboardMarkup(create_queue_button_list(context, sp, update.effective_chat.id)))
+
+            # send a message that the track was pumped
+            # TODO: add expiration to the message
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                parse_mode='HTML',
+                text=f"@{update.effective_user.username} pumped {invoice_title} to {int(context.bot_data[update.effective_chat.id]['queue'][invoice.spotify_uri_list[0]])} sats")
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                parse_mode='HTML',
+                text=f"@{update.effective_user.username} added {invoice_title} to the /queue.")
+            
         try:
             await context.bot.send_message(
                 chat_id=update.effective_user.id,
@@ -1289,8 +1252,9 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
         donation_amount : int = await spotifyhelper.get_donation_fee(invoice.chat_id)
         donation_amount = min(donation_amount,invoice.amount_to_pay)
-        donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
-        result = await invoicehelper.pay_invoice(recipient, donation_invoice)
+        if donation_amount > 0:
+            donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
+            result = await invoicehelper.pay_invoice(recipient, donation_invoice)
 
         return
 
@@ -1298,15 +1262,24 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # add extra data 
     
     # we failed paying the invoice, popup the lnurlp
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"@{update.effective_user.username} add '{invoice_title}' to the queue?\n\nClick to pay below or fund the bot with /fund@Jukebox_Lightning_bot.",       
-        parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([[        
-            InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://{settings.domain}/jukebox/payinvoice?payment_hash={invoice.payment_hash}"),
-            InlineKeyboardButton('Cancel', callback_data = telegramhelper.add_command(TelegramCommand(update.effective_user.id,telegramhelper.cancelinvoice,invoice)))
-        ]]))
-
+    if invoice.command == telegramhelper.upvote:
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"@{update.effective_user.username} pump '{invoice_title}' in the /queue?\n\nClick to pay below or fund the bot with /fund@Jukebox_Lightning_bot.",       
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[        
+                InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://{settings.domain}/jukebox/payinvoice?payment_hash={invoice.payment_hash}"),
+                InlineKeyboardButton('Cancel', callback_data = telegramhelper.add_command(TelegramCommand(update.effective_user.id,telegramhelper.cancelinvoice,invoice)))
+            ]]))
+    else:
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"@{update.effective_user.username} add '{invoice_title}' to the /queue?\n\nClick to pay below or fund the bot with /fund@Jukebox_Lightning_bot.",       
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[        
+                InlineKeyboardButton(f"Pay {amount_to_pay} sats",url=f"https://{settings.domain}/jukebox/payinvoice?payment_hash={invoice.payment_hash}"),
+                InlineKeyboardButton('Cancel', callback_data = telegramhelper.add_command(TelegramCommand(update.effective_user.id,telegramhelper.cancelinvoice,invoice)))
+            ]]))
 
     # add data to the invoice
     invoice.message_id = message.id
@@ -1325,8 +1298,9 @@ async def main() -> None:
 
     # Here we set updater to None because we want our custom webhook server to handle the updates
     # and hence we don't need an Updater instance
+    persistence = PicklePersistence(filepath="jukeboxbot",single_file=False)
     application = (
-        Application.builder().token(settings.bot_token).updater(None).build()
+        Application.builder().token(settings.bot_token).persistence(persistence).updater(None).build()
     )
  
     # register handlers
@@ -1350,7 +1324,8 @@ async def main() -> None:
 
     application.add_handler(CallbackQueryHandler(callback_button))
     application.job_queue.run_repeating(regular_cleanup, 12 * 3600)
-    application.job_queue.run_once(callback_spotify, 2)
+    #application.job_queue.run_once(callback_spotify, 2)
+    application.job_queue.run_once(startup_spotify,2)
 
 
 
@@ -1487,28 +1462,23 @@ async function sendPayment() {{
 </html>
 """)
     
-    async def jukebox_status(request: Request) -> PlainTextResponse:
+    async def jukebox_status(request: Request) -> JSONResponse:
         if 'chat_id' not in request.query_params:
-            return Response("{}",media_type="application/json")
+            return JSONResponse({"status":400,"message":"chat_id not present"})
         
-        chat_id = request.query_params["chat_id"]
+        chat_id = int(request.query_params["chat_id"])
 
-        auth_manager = await spotifyhelper.get_auth_manager(chat_id)                               
-        if auth_manager is None:
-            return PlainTextResponse("""{
-                "title":"Nothing is playing at the moment."
-            }""", media_type="application/json")
-
-        # create spotify instance
-        sp = spotipy.Spotify(auth_manager=auth_manager)
-
+        sp = await spotifyhelper.get_sp(update.effective_chat.id)
+        if not sp:
+            return JSONResponse({"status":400,"message":"Incomplete request, sp is None"})
+        
         # get the current track
         track = sp.current_user_playing_track()
         title = "Nothing is playing at the moment"
         if track:
             title = spotifyhelper.get_track_title(track['item'])
-        return PlainTextResponse(f'{{"title":"{title}"}}',media_type="application/json")
-
+            return JSONResponse({"title":title})
+        
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """
         This function handles the callback from spotify when authorizing request to an account
@@ -1610,8 +1580,8 @@ async function sendPayment() {{
             return HTMLResponse("Incomplete request")
 
         # get spotify auth manager 
-        auth_manager = await spotifyhelper.get_auth_manager(chat_id)                               
-        if auth_manager is None:
+        sp = await spotifyhelper.get_sp(chat_id)                               
+        if sp is None:
             return HTMLResponse("Incomplete request")
 
         return HTMLResponse(f"""<!DOCTYPE html>
@@ -1715,15 +1685,10 @@ async function sendPayment() {{
             return JSONResponse({"status":400,"message":"Incomplete request query is invalid"})
             
         # get spotify auth manager 
-        auth_manager = await spotifyhelper.get_auth_manager(chat_id)                               
-        if auth_manager is None:
-            return JSONResponse({"status":400,"message":"Incomplete request auth manager is None"})
+        sp = await spotifyhelper.get_sp(chat_id)
+        if not sp:
+            return JSONResponse({"status":400,"message":"Incomplete request, sp is None"})
             
-        # create spotify instance
-        sp = spotipy.Spotify(auth_manager=auth_manager)
-        if sp is None:
-            return JSONResponse({"status":400,"message":"Incomplete response sp is none"})
-
         # search for tracks
         numtries: int = 3
         while numtries > 0:
@@ -1799,20 +1764,10 @@ async function sendPayment() {{
         # add spotify prefix to the track_id
         track_id = f"spotify:track:{track_id}"
 
-        # get spotify auth manager 
-        auth_manager = await spotifyhelper.get_auth_manager(chat_id)                               
-        if auth_manager is None:
-            logging.warning("Auth_manager is NULL")
-            return JSONResponse({"status":400,"message":"Incomplete request"})
-
-       
-        # create spotify instance
-        sp = spotipy.Spotify(auth_manager=auth_manager)
-
-        if sp is None:
-            logging.warning("sp is None")
-            return JSONResponse({"status":400,"message":"Incomplete request"})
-
+        # get spotify auth manager
+        sp = await spotifyhelper.get_sp(chat_id)
+        if not sp:
+            return JSONResponse({"status":400,"message":"Incomplete request, sp is None"})
 
         track = sp.track(track_id)        
         track_len = track['duration_ms'] / 1000
