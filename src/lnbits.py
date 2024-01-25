@@ -66,7 +66,7 @@ class LNbits:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.protocol}://{self.host}/usermanager/api/v1/users",
-                headers={'X-Api-Key':self._admin_invoicekey},
+                headers={'X-Api-Key':self._admin_adminkey},
                 json={
                     "admin_id": self._admin_usrkey,
                     "wallet_name": name,
