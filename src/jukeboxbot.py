@@ -666,8 +666,7 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text=payment_result['detail'])
 
 # search for a track
-@debounce
-async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def search_track(update: Update, context: ContextTypes.DEFAULT_TYPE, searchstr: str) -> None:
     """
     This function searches for tracks in spotify and createas a list of tracks to play
     If a playlist URL is provided, that playlist is used
@@ -692,15 +691,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # create spotify instance
     sp = spotipy.Spotify(auth_manager=auth_manager)
     
-    # validate the search string
-    searchstr = update.message.text.split(' ',1)
-    if len(searchstr) > 1:
-        searchstr = searchstr[1]
-    else:
-        message = await context.bot.send_message(chat_id=update.effective_chat.id,text=jukeboxtexts.add_command_help)
-        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
-        return
-
     # check if the search string is a spotify URL
     match = re.search('https://open.spotify.com/playlist/([A-Za-z0-9]+).*$',searchstr)
     if (match):
@@ -723,7 +713,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             result = sp.search(searchstr)
         except spotipy.oauth2.SpotifyOauthError:
-            # spotify not properly authenticated
+            # spotify not properly authenticated
             logging.info("Spotify Oauth error")
             message = await context.bot.send_message(
                 chat_id=update.effective_chat.id,
@@ -772,7 +762,27 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         message = await context.bot.send_message(chat_id=update.effective_chat.id,text=f"No results for '{searchstr}'")
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_short, data={'message':message})
 
+# search for a pixies track
+@debounce
+async def pixies(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await search_track(update, context, 'The Pixies')
 
+# search for a mark knopfler track
+@debounce
+async def markknopfler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await search_track(update, context,'Mark Knopfler')
+    
+# search for a track
+@debounce
+async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    searchstr = update.message.text.split(' ',1)
+    if len(searchstr) > 1:
+        searchstr = searchstr[1]            
+        await search_track(update, context,searchstr)
+    else:
+        message = await context.bot.send_message(chat_id=update.effective_chat.id,text=jukeboxtexts.add_command_help)
+        context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
+    
 # send sats from user to user
 @debounce
 async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -916,8 +926,9 @@ async def callback_paid_invoice(invoice: Invoice):
     donator = await userhelper.get_or_create_user(invoice.recipient.userid)
     donation_amount : int = await spotifyhelper.get_donation_fee(invoice.chat_id)
     donation_amount = min(donation_amount,invoice.amount_to_pay)
-    donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
-    result = await invoicehelper.pay_invoice(donator, donation_invoice)
+    if donation_amount > 0:
+        donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
+        result = await invoicehelper.pay_invoice(donator, donation_invoice)
 
     return
 
@@ -1289,8 +1300,9 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         jukeboxbot = await userhelper.get_or_create_user(settings.bot_id)
         donation_amount : int = await spotifyhelper.get_donation_fee(invoice.chat_id)
         donation_amount = min(donation_amount,invoice.amount_to_pay)
-        donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
-        result = await invoicehelper.pay_invoice(recipient, donation_invoice)
+        if donation_amount > 0:
+            donation_invoice = await invoicehelper.create_invoice(jukeboxbot, donation_amount, "donation to the bot")
+            result = await invoicehelper.pay_invoice(recipient, donation_invoice)
 
         return
 
@@ -1331,6 +1343,8 @@ async def main() -> None:
  
     # register handlers
     application.add_handler(CommandHandler('add', search))  # search for a track
+    application.add_handler(CommandHandler('pixies', pixies))  # search for a pixies track
+    application.add_handler(CommandHandler('mark', markknopfler))  # search for a Mark Knopfler track
     application.add_handler(CommandHandler(['stack','balance'], balance)) # view wallet balance
     application.add_handler(CommandHandler('couple', connect)) # connect to spotify account
     application.add_handler(CommandHandler('decouple', disconnect)) # disconnect from spotify account
