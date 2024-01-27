@@ -267,6 +267,11 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 def create_queue_button_list(context, sp, chat_id: int):
     button_list = []
     count = 1
+    if not chat_id in context.bot_data:
+        return button_list
+    if not 'queue' in context.bot_data[chat_id]:
+        return button_list
+    
     for uri in context.bot_data[chat_id]['queue']:
         amount = context.bot_data[chat_id]['queue'][uri]
         if amount > 100000000 - 1:
@@ -310,7 +315,10 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     title += "\n\nUse the /add command to add your favourite track to the queue, or click on a track to pump it to the top of the queue."
 
-    if len(context.bot_data[update.effective_chat.id]['queue']) == 0:
+
+    if update.effective_chat.id in context.bot_data and 'queue' in context.bot_data[update.effective_chat.id] and len(context.bot_data[update.effective_chat.id]['queue']) > 0:
+        pass
+    else:
         title += "\nRequest queue is empty."
 
     await send_telegram_message(
@@ -689,7 +697,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         message = await context.bot.send_message(chat_id=update.effective_chat.id,text=jukeboxtexts.add_command_help)
         context.job_queue.run_once(delete_message, settings.delete_message_timeout_medium, data={'message':message})
-    
+
 # send sats from user to user
 @debounce
 async def dj(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -922,6 +930,9 @@ async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
     # default interval
     interval = 300
 
+    # make sure that chat_id exists in bot_data
+    if not chat_id in application.bot_data:
+        application.bot_data[chat_id] = {}
 
     try:
         sp = await spotifyhelper.get_sp(chat_id)
@@ -946,17 +957,14 @@ async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
             interval  = ( currenttrack['item']['duration_ms'] - currenttrack['progress_ms'] ) / 1000
 
             # if now playing is next in the player queue, remove from local queue
-            if len(application.bot_data[chat_id]['queue']) > 0:
+            if 'queue' in application.bot_data[chat_id] and len(application.bot_data[chat_id]['queue']) > 0:
                 next_in_queue_uri = list(application.bot_data[int(chat_id)]['queue'].keys())[0]                        
                 if next_in_queue_uri == currenttrack['item']['uri']:
                     logging.info("First track in queue is now playing, removing from queue")
                     application.bot_data[int(chat_id)]['queue'].pop(next_in_queue_uri)
 
-        # update title
-        if not chat_id in application.bot_data:
-            application.bot_data[chat_id] = {}
-                
         if 'now_playing_message' in application.bot_data[chat_id]:
+            logging.info(f"Now playing message is present in bot_data")
             try:
                 [message_id, prev_title] = application.bot_data[chat_id]['now_playing_message']
                 if prev_title != title:                    
@@ -993,8 +1001,8 @@ async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
             except Exception as e:
                 logging.error(f"exception when sending message to chat {chat_id} of type {type(e).__name__}")                            
                 
-    except:
-        logging.error("Unhandled exception in callback_now_playing")
+    except Exception as err:
+        logging.error(f"Unhandled exception in callback_now_playing {type(err).__name__} {err.message}")
     finally:
         logging.info(f"Next run in {interval} seconds")
         context.job_queue.run_once(callback_now_playing, interval + 5, data=chat_id, job_kwargs = {'misfire_grace_time':None})
