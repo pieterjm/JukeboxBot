@@ -18,6 +18,7 @@ import statshelper
 import qrcode
 from PIL import Image
 import asyncio_mqtt as aiomqtt
+import random
 from telegram.error import BadRequest, ChatMigrated
 
 import uvicorn
@@ -666,7 +667,7 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text=payment_result['detail'])
 
 # search for a track
-async def search_track(update: Update, context: ContextTypes.DEFAULT_TYPE, searchstr: str) -> None:
+async def search_track(update: Update, context: ContextTypes.DEFAULT_TYPE, searchstr: str,limit=5,offset=0) -> None:
     """
     This function searches for tracks in spotify and createas a list of tracks to play
     If a playlist URL is provided, that playlist is used
@@ -711,7 +712,7 @@ async def search_track(update: Update, context: ContextTypes.DEFAULT_TYPE, searc
     numtries: int = 3
     while numtries > 0:
         try:
-            result = sp.search(searchstr)
+            result = sp.search(searchstr,type='track',limit=limit,offset=offset)
         except spotipy.oauth2.SpotifyOauthError:
             # spotify not properly authenticated
             logging.info("Spotify Oauth error")
@@ -765,12 +766,14 @@ async def search_track(update: Update, context: ContextTypes.DEFAULT_TYPE, searc
 # search for a pixies track
 @debounce
 async def pixies(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await search_track(update, context, 'The Pixies')
+    offset=random.randint(0,50)
+    await search_track(update, context, 'The Pixies',offset=offset)
 
 # search for a mark knopfler track
 @debounce
 async def markknopfler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await search_track(update, context,'Mark Knopfler')
+    offset=random.randint(0,50)
+    await search_track(update, context,'Mark Knopfler',offset=offset)
     
 # search for a track
 @debounce
