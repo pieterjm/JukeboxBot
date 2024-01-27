@@ -29,6 +29,7 @@ def init():
     global bot_id
     global donation_fee
     global superadmins
+    global max_spotify_poll_interval
 
     domain=os.environ['JUKEBOX_DOMAIN']
     
@@ -56,7 +57,8 @@ def init():
 
     # webserver port
     port = 7000
-    
+
+    max_spotify_poll_interval = 300
     price = 210
     fund_max = 42000
     fund_min = price
