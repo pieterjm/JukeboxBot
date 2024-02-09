@@ -154,7 +154,8 @@ async def send_telegram_message(context, chat_id, text, delete_timeout=0,reply_m
         chat_id=chat_id,
         parse_mode=parse_mode,
         text=text,
-        reply_markup=reply_markup
+        reply_markup=reply_markup,
+        disable_web_page_preview=True
     )
     if delete_timeout > 0:
         context.job_queue.run_once(delete_message, delete_timeout, data={'message':message})

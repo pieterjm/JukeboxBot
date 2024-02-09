@@ -2,13 +2,13 @@ def init():
     # when the help, start command is given
     global help
     help = """
-/add artist and track (select best option)
-/queue (upcoming tracks)
-/history (recent playlist)
-/fund (add sats to your Jukebox)
-/stack (check Jukebox balance)
-/refund (send sats from your /stack to another wallet)
-/dj [amount] (tip a user e.g. with /dj 21)
+/add artist and track \(select best option\)
+/queue \(upcoming tracks\)
+/history \(recent playlist\)
+/fund \(add sats to your Jukebox\)
+/stack \(check Jukebox balance\)
+/refund \(send sats from your /stack to another wallet\)
+/dj [amount] \(tip a user in a reply e\.g\. /dj 21\)
 
 Find all commands [here](https://github.com/LightningJukeboxBot/LightningJukeboxBot?tab=readme-ov-file#tg-commands-for-the-bot)
 Learn how to setup your own Jukebox [here](https://github.com/LightningJukeboxBot/LightningJukeboxBot?tab=readme-ov-file#how-do-i-couple-the-bot-to-my-own-spotify-premium-account)

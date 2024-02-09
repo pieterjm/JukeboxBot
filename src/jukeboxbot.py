@@ -112,6 +112,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         context=context,
         chat_id=update.effective_chat.id,
         text=jukeboxtexts.help,
+        parse_mode='MarkdownV2',
         delete_timeout=settings.delete_message_timeout_medium)
 
 # display stats
