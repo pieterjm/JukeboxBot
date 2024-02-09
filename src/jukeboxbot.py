@@ -1509,7 +1509,7 @@ async function sendPayment() {{
         
         chat_id = int(request.query_params["chat_id"])
 
-        sp = await spotifyhelper.get_sp(update.effective_chat.id)
+        sp = await spotifyhelper.get_sp(chat_id)
         if not sp:
             return JSONResponse({"status":400,"message":"Incomplete request, sp is None"})
         
