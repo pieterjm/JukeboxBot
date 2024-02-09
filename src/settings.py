@@ -83,6 +83,11 @@ def init():
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             level=logging.INFO
         )
+
+        logging.getLogger("apscheduler").setLevel(logging.WARN)
+        logging.getLogger("httpx").setLevel(logging.WARN)
+        
+        
         return True
     elif env == 'development':
         logging.basicConfig(
@@ -90,6 +95,8 @@ def init():
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             level=logging.INFO
         )
+        logging.getLogger("apscheduler").setLevel(logging.WARN)
+        logging.getLogger("httpx").setLevel(logging.WARN)
         return True
     else:
         print("unknown environment")

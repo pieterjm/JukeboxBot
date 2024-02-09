@@ -1056,6 +1056,14 @@ async def check_spotify_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     This function starts up the jobs that monitor the current ]playing track in spotify and manage the play queue
     """
+    bFirst = False
+    if 'first' in context.job.data:
+        bFirst = context.job.data['first']
+
+    if bFirst:
+        logging.info("Forcing update of all player statusses (bFirst == True)")
+    
+        
     for key in settings.rds.scan_iter("group:*"):
         chat_id = int(key.decode('utf-8').split(':')[1])
 
@@ -1066,10 +1074,11 @@ async def check_spotify_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
         if not 'last_poll' in application.bot_data[chat_id]:
             application.bot_data[chat_id]['last_poll'] = 0
 
-
-        if time() - application.bot_data[chat_id]['last_poll'] > 3 * settings.max_spotify_poll_interval:
+        if bFirst == True or time() - application.bot_data[chat_id]['last_poll'] > 3 * settings.max_spotify_poll_interval:
             logging.info(f"Starting up spotify callback for {chat_id}")
             context.job_queue.run_once(callback_now_playing, 2, data=chat_id, job_kwargs = {'misfire_grace_time':None})
+
+    context.job.data = {'first':False}
         
 #callback for button presses
 async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1356,7 +1365,7 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(callback_button))
     application.job_queue.run_repeating(regular_cleanup, 12 * 3600)
     #application.job_queue.run_once(callback_spotify, 2)
-    application.job_queue.run_repeating(check_spotify_callback,1800,first=10)
+    application.job_queue.run_repeating(check_spotify_callback,1800,first=10,data={'first':True})
 
 
 
