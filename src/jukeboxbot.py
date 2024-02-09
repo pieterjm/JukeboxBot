@@ -1004,13 +1004,16 @@ async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
                     logging.error(f"BadRequest with unknown error message: {err.message}")                                       
             except Exception as e:
                 logging.error(f"exception when sending message to chat {chat_id} of type {type(e).__name__}")                            
-                
+    except spotipy.oauth2.SpotifyOauthError:
+        logging.error("Spotify OAuth error. Exiting for now")
+        return
     except Exception as err:
-        logging.error(f"Unhandled exception in callback_now_playing {type(err).__name__} {err.message}")
-    finally:
-        logging.info(f"Next run in {interval} seconds")
-        context.job_queue.run_once(callback_now_playing, interval + 5, data=chat_id, job_kwargs = {'misfire_grace_time':None})
-        context.job_queue.run_once(callback_manage_queue, interval - 10, data=chat_id, job_kwargs = {'misfire_grace_time':None})
+        logging.error(f"Unhandled exception in callback_now_playing {type(err).__name__}")
+        
+
+    logging.info(f"Next run in {interval} seconds")
+    context.job_queue.run_once(callback_now_playing, interval + 5, data=chat_id, job_kwargs = {'misfire_grace_time':None})
+    context.job_queue.run_once(callback_manage_queue, interval - 10, data=chat_id, job_kwargs = {'misfire_grace_time':None})
     
             
 async def callback_manage_queue(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1050,8 +1053,11 @@ async def callback_manage_queue(context: ContextTypes.DEFAULT_TYPE) -> None:
                 add_to_queue_or_upvote(next_in_queue_uri, chat_id, 100000000)
                 #application.bot_data[int(chat_id)]['queue'].pop(next_in_queue_uri)
 
-    except:
-        logging.error("Unhandled exception in callback_manage_queue")
+    except spotipy.oauth2.SpotifyOauthError as err:
+        logging.error(f"SpotifyOAuth error")
+    except Exception as err:
+        logging.error(f"Unhandled exception in callback_manage_queue {type(err).__name__}")
+    
         
 async def check_spotify_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -1352,7 +1358,7 @@ async def main() -> None:
     application.add_handler(CommandHandler('fund',fund)) # add funds to wallet
     application.add_handler(CommandHandler('history', history)) # view history of tracks
     application.add_handler(CommandHandler('link',link)) # view LNDHUB QR 
-    application.add_handler(CommandHandler('refund', pay)) # pay a lightning invoice
+    #application.add_handler(CommandHandler('refund', pay)) # pay a lightning invoice
     application.add_handler(CommandHandler('price', price)) # set the track price
     application.add_handler(CommandHandler('queue', queue)) # view the queue
     application.add_handler(CommandHandler('service', service)) # service notifications to bot users
