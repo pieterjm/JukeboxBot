@@ -11,6 +11,7 @@ from telegram import (
 from telegram.ext import (
     ContextTypes
 )
+import jukeboxtexts
 
 arf = {}
 
