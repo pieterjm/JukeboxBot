@@ -1007,6 +1007,8 @@ async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
     except spotipy.oauth2.SpotifyOauthError:
         logging.error("Spotify OAuth error. Exiting for now")
         return
+    except RuntimeError as err:
+        logging.error(f"Caught runtime error {err}")
     except Exception as err:
         logging.error(f"Unhandled exception in callback_now_playing {type(err).__name__}")
         
@@ -1358,7 +1360,7 @@ async def main() -> None:
     application.add_handler(CommandHandler('fund',fund)) # add funds to wallet
     application.add_handler(CommandHandler('history', history)) # view history of tracks
     application.add_handler(CommandHandler('link',link)) # view LNDHUB QR 
-    #application.add_handler(CommandHandler('refund', pay)) # pay a lightning invoice
+    application.add_handler(CommandHandler('refund', pay)) # pay a lightning invoice
     application.add_handler(CommandHandler('price', price)) # set the track price
     application.add_handler(CommandHandler('queue', queue)) # view the queue
     application.add_handler(CommandHandler('service', service)) # service notifications to bot users
