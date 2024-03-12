@@ -32,7 +32,8 @@ class Invoice:
             'amount_to_pay': self.amount_to_pay,
             'recipient': {
                 'userid': self.recipient.userid,
-                'username': self.recipient.username
+                'username': self.recipient.username,
+                'invoicekey': self.recipient.invoicekey
             },
             'user': {
                 'userid': self.user.userid,
@@ -60,6 +61,7 @@ class Invoice:
 
         udata = data['recipient']
         self.recipient = User(udata['userid'],udata['username'])
+        self.recipient.invoicekey = udata['invoicekey']
         udata = data['user']
         self.user = User(udata['userid'],udata['username'])
         

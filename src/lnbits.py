@@ -174,6 +174,8 @@ class LNbits:
     async def checkInvoice(self,invoicekey,payment_hash):
         async with httpx.AsyncClient() as client:
             try:
+                logging.info(payment_hash)
+                logging.info(invoicekey)
                 response = await client.get(
                     f"{self.protocol}://{self.host}/api/v1/payments/{payment_hash}",
                     headers = {"X-Api-Key": invoicekey})

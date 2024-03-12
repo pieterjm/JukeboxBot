@@ -1519,6 +1519,190 @@ async function sendPayment() {{
 </body>
 </html>
 """)
+
+    async def web_api_check_payment(request: Request) -> JSONResponse:
+        chat_id = int(request.path_params['chat_id'])
+        payment_hash = request.path_params['payment_hash']
+
+        invoice = await invoicehelper.get_invoice(payment_hash)
+        if invoice is None:            
+            return JSONResponse({"status":404,"message":"Invoice not found"})
+
+        if await invoicehelper.invoice_paid(invoice) == True:
+            return JSONResponse({"status":200,"message":"Invoice paid"})
+
+        return JSONResponse({"status":402,"message":"Invoice not paid"})
+
+    
+    async def web_api_request(request: Request) -> JSONResponse:
+        chat_id = int(request.path_params['chat_id'])
+
+        # get form        
+        form = await request.json()
+
+        # validate that form is present
+        if form is None:
+            return JSONResponse({"status":400,"message":"Incomplete request form is None"})
+
+        # get query
+        track_id = form["track_id"]
+
+        # validate that track_id is present
+        if track_id is None:
+            return JSONResponse({"status":400,"message":"Incomplete request track_id is None"})
+
+        # validate allow characters in track_id
+        if not re.search("^[A-Za-z0-9]+$",track_id):
+            return JSONResponse({"status":400,"message":"Incomplete request track_id is invalid"})
+        
+        # add spotify prefix to the track_id
+        track_id = f"spotify:track:{track_id}"
+
+        # get spotify auth manager
+        sp = await spotifyhelper.get_sp(chat_id)
+        if not sp:
+            return JSONResponse({"status":400,"message":"Incomplete request, sp is None"})
+
+        track = sp.track(track_id)        
+        track_len = track['duration_ms'] / 1000
+        
+        amount_to_pay = int(await spotifyhelper.get_price(chat_id))
+        if ( track_len > 600 ):
+            amount_to_pay = 10 * amount_to_pay
+#        if ( track_len > 1800 ):
+#            amount_to_pay = 10 * amount_
+#        elif ( track_len > 600 ):
+#            amount_to_pay = amount_to_pay * 1.0166428 ** (track_len - 300)
+        recipient = await userhelper.get_group_owner(chat_id)
+        invoice_title = f"'{spotifyhelper.get_track_title(track)}'"
+        invoice = await invoicehelper.create_invoice(recipient, amount_to_pay, invoice_title)
+        if invoice is None:
+            return JSONResponse({"status":400,"message":"Payments not available"})
+
+
+        invoice.user = User(80,"Web user")
+        invoice.title = invoice_title
+        invoice.recipient = recipient   
+        logging.info("recipient when creating invoice: " + invoice.recipient.toJson())
+        invoice.spotify_uri_list = [ track_id ]
+        invoice.title = invoice_title
+        invoice.chat_id = chat_id
+        invoice.amount_to_pay = amount_to_pay
+
+        # save the invoice
+        await invoicehelper.save_invoice(invoice)
+
+        application.job_queue.run_once(check_invoice_callback, 15, data = invoice)
+
+        message = {
+            'status':200,
+            'result':{
+                'title':invoice.title,
+                'amount':invoice.amount_to_pay,
+                'payment_hash':invoice.payment_hash,
+                'payment_request':invoice.payment_request
+            }
+        }
+
+        return JSONResponse(message)
+                  
+    async def web_api_search(request: Request) -> JSONResponse:
+        chat_id = int(request.path_params['chat_id'])
+
+        # get form        
+        form = await request.json()
+
+        # validate that form is present
+        if form is None:
+            return JSONResponse({"status":400,"message":"Incomplete request form is None"})
+
+        # get query
+        query = form["query"]
+
+        # validate that query is present
+        if query is None:
+            return JSONResponse({"status":400,"message":"Incomplete request query is None"})
+
+        # validate allow characters in query
+        if not re.search("^[A-Za-z0-9 ]+$",query):
+            return JSONResponse({"status":400,"message":"Incomplete request query is invalid"})
+            
+        # get spotify auth manager 
+        sp = await spotifyhelper.get_sp(chat_id)
+        if not sp:
+            return JSONResponse({"status":400,"message":"Incomplete request, sp is None"})
+            
+        # search for tracks
+        numtries: int = 3
+        while numtries > 0:
+            try:
+                result = sp.search(query)
+            except spotipy.exceptions.SpotifyException:
+                numtries -= 1
+                if numtries == 0:
+                    logging.error("Spotify returned and exception, not returning search result")
+                    return JSONResponse({"status":400,"message":"Search currently unavailable"})
+                logging.warning("Spotify returned and exception, retrying")
+                continue
+            break
+
+        # create a list of max five items
+        if len(result['tracks']['items']) == 0:
+            return JSONResponse({"status":200,"results":[]})
+
+
+        message = {'result':{'tracks':[]}}
+        tracktitles  = {}
+
+        for item in result['tracks']['items']:            
+            title = spotifyhelper.get_track_title(item)
+            track_id = item['uri']
+            result = re.search("^spotify:track:([A-Z0-9a-z]+)$",track_id)
+            if not result:
+                continue
+
+            # strip spotify from the track id
+            track_id = result.groups()[0]
+
+            if title not in tracktitles:
+                message['result']['tracks'].append({'title':title,'track_id':track_id})
+                # max five suggestions
+                if len(message['result']['tracks']) > 5:                    
+                    break
+
+        message['status'] = 200
+                
+        return JSONResponse(message)
+
+
+
+    async def web_api_status(request: Request) -> JSONResponse:
+        chat_id = int(request.path_params['chat_id'])
+        sp = await spotifyhelper.get_sp(chat_id)
+        if not sp:
+            return JSONResponse({"status":400,"message":"Incomplete request, sp is None"})
+
+        message = {
+            'now':{},
+            'queue':[],
+            'price': await spotifyhelper.get_price(chat_id),
+            'donation': await spotifyhelper.get_donation_fee(chat_id)
+        }
+        
+        track = sp.current_user_playing_track()
+        message['now']['title'] = "Nothing is playing at the moment"
+        
+        if track:
+            message['now']['title'] = spotifyhelper.get_track_title(track['item'])        
+
+        for uri in application.bot_data[chat_id]['queue']:
+            message['queue'].append({
+                'title':spotifyhelper.get_track_title(sp.track(uri)),
+                'track_id':uri,
+                'amount':application.bot_data[chat_id]['queue'][uri]})
+
+        message['status'] = 200
+        return JSONResponse(message)
     
     async def jukebox_status(request: Request) -> JSONResponse:
         if 'chat_id' not in request.query_params:
@@ -1535,7 +1719,8 @@ async function sendPayment() {{
         title = "Nothing is playing at the moment"
         if track:
             title = spotifyhelper.get_track_title(track['item'])
-            return JSONResponse({"title":title})
+
+        return JSONResponse({"title":title})
         
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """
@@ -1709,6 +1894,9 @@ async function sendPayment() {{
 
   </script> </html>""")
 
+    
+
+    
     async def web_search(request: Request) -> JSONResponse:
         chat_id = request.path_params['chat_id']
         print("Web search")
@@ -1872,8 +2060,11 @@ async function sendPayment() {{
             Route("/jukebox/fund",jukebox_fund, methods=["GET"]),
             Route("/jukebox/web/{chat_id}",web_home, methods=["GET"]),
             Route("/jukebox/web/{chat_id}/search",web_search, methods=["POST"]),
-            Route("/jukebox/web/{chat_id}/add",web_add, methods=["GET"])
-            
+            Route("/jukebox/web/{chat_id}/add",web_add, methods=["GET"]),
+            Route("/jukebox/api/{chat_id}/status",web_api_status,methods=["GET"]),   # get current status
+            Route("/jukebox/api/{chat_id}/search",web_api_search,methods=["POST"]),   # search for a track
+            Route("/jukebox/api/{chat_id}/request",web_api_request,methods=["POST"]),   # request a track
+            Route("/jukebox/api/{chat_id}/payment/{payment_hash}",web_api_check_payment,methods=["GET"]),   # check payment status
         ]
     )
 
