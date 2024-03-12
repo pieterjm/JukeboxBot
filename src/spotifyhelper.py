@@ -189,6 +189,8 @@ async def save_spotify_settings(sps):
     """
     Store spotify settings in Redis
     """
+    logging.info(sps.toJson())
+    logging.info(sps.userkey)
     settings.rds.hset(sps.userkey,"spotify",sps.toJson())
     
 
@@ -200,6 +202,7 @@ async def get_spotify_settings(userid):
     data = settings.rds.hget(sps.userkey,"spotify")
     if data is not None:
         sps.loadJson(data)
+        logging.info(data)
     return sps
 
 async def delete_chat(chat_id):

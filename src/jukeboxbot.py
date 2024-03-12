@@ -360,7 +360,12 @@ async def disconnect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 #@adminonly
 async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # get spotify settings for the user
-    sps = await spotifyhelper.get_spotify_settings(update.effective_user.id)    
+    logging.info(f"couple command by user: {update.effective_user.id}")
+    sps = await spotifyhelper.get_spotify_settings(update.effective_user.id)
+    logging.info(f"Client ID = {sps.client_id}")
+    logging.info(f"Client secret = {sps.client_secret}")
+
+    
     
     # this command has to be execute from within a group
     if update.message.chat.type == "private":
@@ -413,6 +418,9 @@ To connect this bot to your spotify account, you have to create an app in the de
     # send message in group to go to private chat
     bot_me = await context.bot.get_me()
 
+    logging.info(f"Client ID = {sps.client_id}")
+    logging.info(f"Client secret = {sps.client_secret}")
+    
     # if both variables are not none, ask the user to authorize
     if sps.client_id is not None and sps.client_secret is not None:
 
@@ -463,6 +471,7 @@ To connect this bot to your spotify account, you have to create an app in the de
 @private_chat_only
 async def spotify_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # get spotify settings for the user
+    logging.info(f"Spotify settings by user {update.effective_user.id}")
     sps = await spotifyhelper.get_spotify_settings(update.effective_user.id)
 
     result = re.search("/(setclientid|setclientsecret)\s+([a-z0-9]+)\s*$",update.message.text)
@@ -1037,7 +1046,7 @@ async def callback_manage_queue(context: ContextTypes.DEFAULT_TYPE) -> None:
         currenttrack = sp.current_user_playing_track()
 
         # add next track to the player queue
-        if len(application.bot_data[chat_id]['queue']) > 0:
+        if (chat_id in application.bot_data and 'queue') in (application.bot_data[chat_id]) and len(application.bot_data[chat_id]['queue']) > 0:
             next_in_queue_uri = list(application.bot_data[int(chat_id)]['queue'].keys())[0]                        
             result = sp.queue()
 
