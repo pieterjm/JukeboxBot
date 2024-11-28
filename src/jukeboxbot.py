@@ -973,7 +973,7 @@ async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
             if 'queue' in application.bot_data[chat_id] and len(application.bot_data[chat_id]['queue']) > 0:
                 next_in_queue_uri = list(application.bot_data[int(chat_id)]['queue'].keys())[0]                        
                 if next_in_queue_uri == currenttrack['item']['uri']:
-                    logging.info("First track in queue is now playing, removing from queue")
+                    logging.info(f"First track {next_in_queue_uri} in queue is now playing, removing from queue")
                     application.bot_data[int(chat_id)]['queue'].pop(next_in_queue_uri)
 
         if 'now_playing_message' in application.bot_data[chat_id]:
@@ -989,6 +989,8 @@ async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
                     logging.info("Now playing message not found, deleting from local cache")
                     del application.bot_data[chat_id]['now_playing_message']
                     interval = 30
+                elif err.message == "Message is not modified":
+                    logging.info("Message is not modified")
                 else:
                     logging.error(f"BadRequest with unknown error message: {err.message}")                                               
             except Exception as err:
@@ -1023,8 +1025,9 @@ async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
         
 
     logging.info(f"Next run in {interval} seconds")
-    context.job_queue.run_once(callback_now_playing, interval + 5, data=chat_id, job_kwargs = {'misfire_grace_time':None})
-    context.job_queue.run_once(callback_manage_queue, interval - 10, data=chat_id, job_kwargs = {'misfire_grace_time':None})
+    if interval > 0:
+        context.job_queue.run_once(callback_now_playing, interval + 5, data=chat_id, job_kwargs = {'misfire_grace_time':None})
+        context.job_queue.run_once(callback_manage_queue, interval - 10, data=chat_id, job_kwargs = {'misfire_grace_time':None})
     
             
 async def callback_manage_queue(context: ContextTypes.DEFAULT_TYPE) -> None:
