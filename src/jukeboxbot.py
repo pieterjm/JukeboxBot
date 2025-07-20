@@ -1706,6 +1706,44 @@ async function sendPayment() {{
 
         message['status'] = 200
         return JSONResponse(message)
+
+    # get the songs that are played
+    async def web_api_playlist(request: Request) -> JSONResponse:
+        chat_id = int(request.path_params['chat_id'])
+        sp = await spotifyhelper.get_sp(chat_id)
+        if not sp:
+            return JSONResponse({"status":400,"message":"Incomplete request, sp is None"})
+
+        message = {
+            'now':{},
+            'queue':[],
+            'playlist':[],
+            'price': await spotifyhelper.get_price(chat_id),
+            'donation': await spotifyhelper.get_donation_fee(chat_id)
+        }
+        
+        track = sp.current_user_playing_track()
+        message['now']['title'] = "Nothing is playing at the moment"
+        
+        if track:
+            message['now']['title'] = spotifyhelper.get_track_title(track['item'])        
+
+        for uri in application.bot_data[chat_id]['queue']:
+            message['queue'].append({
+                'title':spotifyhelper.get_track_title(sp.track(uri)),
+                'track_id':uri,
+                'amount':application.bot_data[chat_id]['queue'][uri]})
+            
+        history = await spotifyhelper.get_history(chat_id,20)
+        for title in history:
+            message['playlist'].append({
+                'title': title
+                })
+            
+        message['status'] = 200
+        return JSONResponse(message)
+
+
     
     async def jukebox_status(request: Request) -> JSONResponse:
         if 'chat_id' not in request.query_params:
@@ -1724,7 +1762,8 @@ async function sendPayment() {{
             title = spotifyhelper.get_track_title(track['item'])
 
         return JSONResponse({"title":title})
-        
+
+
     async def spotify_callback(request: Request) -> PlainTextResponse:
         """
         This function handles the callback from spotify when authorizing request to an account
@@ -2065,6 +2104,7 @@ async function sendPayment() {{
             Route("/jukebox/web/{chat_id}/search",web_search, methods=["POST"]),
             Route("/jukebox/web/{chat_id}/add",web_add, methods=["GET"]),
             Route("/jukebox/api/{chat_id}/status",web_api_status,methods=["GET"]),   # get current status
+            Route("/jukebox/api/{chat_id}/playlist",web_api_playlist,methods=["GET"]),   # get current status
             Route("/jukebox/api/{chat_id}/search",web_api_search,methods=["POST"]),   # search for a track
             Route("/jukebox/api/{chat_id}/request",web_api_request,methods=["POST"]),   # request a track
             Route("/jukebox/api/{chat_id}/payment/{payment_hash}",web_api_check_payment,methods=["GET"]),   # check payment status
