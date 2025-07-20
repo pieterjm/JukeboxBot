@@ -889,10 +889,45 @@ async def web(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     return the Web URL where tracks can be requested using a browser
     """
     userid: int = update.effective_user.id
-
+    chat_id = update.effective_chat.id
+    
     if update.message.chat.type == "private":
         return
 
+    if not chat_id in application.bot_data:
+        application.bot_data[chat_id] = {}
+    if not 'web' in application.bot_data[chat_id]:
+        application.bot_data[chat_id]['web'] = True
+        
+    bAdmin = False
+    for member in await context.bot.get_chat_administrators(chat_id):
+        if member.user.id == update.effective_user.id and member.status in ['administrator','creator']:
+            bAdmin = True
+
+    if bAdmin:
+        if ( update.message.text == '/web on' ):
+            application.bot_data[chat_id]['web'] = True
+        elif ( update.message.text == '/web off' ):
+            application.bot_data[chat_id]['web'] = False
+        elif (update.message.text == '/web' ):
+            pass
+        else:
+            await send_telegram_message(
+                context=context,
+                chat_id=chat_id,
+                text="Use the /web off comnmand to disable requesting tracks from the web, or /web on, to enable",
+                delete_timeout=settings.delete_message_timeout_short)
+            return
+
+    if application.bot_data[chat_id]['web'] == False:
+        await send_telegram_message(
+            context=context,
+            chat_id=chat_id,
+            text="Web access is currently disabled",
+            delete_timeout=settings.delete_message_timeout_short)
+        return
+        
+    
     jukebox_url = f"https://{settings.domain}/jukebox/web/{update.effective_chat.id}"
     filename = os.path.join(settings.qrcode_path,f"web_url_{update.effective_chat.id}.png")
 
@@ -1576,6 +1611,15 @@ async function sendPayment() {{
     async def web_api_request(request: Request) -> JSONResponse:
         chat_id = int(request.path_params['chat_id'])
 
+        if not chat_id in application.bot_data:
+            application.bot_data[chat_id] = {}
+        if not 'web' in application.bot_data[chat_id]:
+            application.bot_data[chat_id]['web'] = True
+        if application.bot_data[chat_id]['web'] == False:
+            return JSONResponse({"status":400,"message":"Web access disabled"})
+
+
+        
         # get form        
         form = await request.json()
 
@@ -1648,6 +1692,13 @@ async function sendPayment() {{
     async def web_api_search(request: Request) -> JSONResponse:
         chat_id = int(request.path_params['chat_id'])
 
+        if not chat_id in application.bot_data:
+            application.bot_data[chat_id] = {}
+        if not 'web' in application.bot_data[chat_id]:
+            application.bot_data[chat_id]['web'] = True
+        if application.bot_data[chat_id]['web'] == False:
+            return JSONResponse({"status":400,"message":"Web access disabled"})
+        
         # get form        
         form = await request.json()
 
@@ -1891,6 +1942,8 @@ async function sendPayment() {{
 
     async def web_home(request: Request) -> PlainTextResponse:
         chat_id = request.path_params['chat_id']
+
+        
         
         if chat_id is None:
             return HTMLResponse("Incomplete request")
@@ -1900,6 +1953,15 @@ async function sendPayment() {{
         except:
             return HTMLResponse("Incomplete request")
 
+
+        if not chat_id in application.bot_data:
+            application.bot_data[chat_id] = {}
+        if not 'web' in application.bot_data[chat_id]:
+            application.bot_data[chat_id]['web'] = True
+        if application.bot_data[chat_id]['web'] == False:
+            return HTMLResponse("Web access disabled")
+        
+        
         # get spotify auth manager 
         sp = await spotifyhelper.get_sp(chat_id)                               
         if sp is None:
@@ -1988,6 +2050,15 @@ async function sendPayment() {{
             chat_id = int(chat_id)
         except:
             return JSONResponse({"status":400,"message":"Incomplete request. Failed to cast chat_id"})
+
+
+        if not chat_id in application.bot_data:
+            application.bot_data[chat_id] = {}
+        if not 'web' in application.bot_data[chat_id]:
+            application.bot_data[chat_id]['web'] = True
+        if application.bot_data[chat_id]['web'] == False:
+            return JSONResponse({"status":400,"message":"Web access disabled"})
+        
         
         # get form        
         form = await request.json()
@@ -2070,6 +2141,14 @@ async function sendPayment() {{
         except:
             logging.warning("chat_id is not an integer")
             return JSONResponse({"status":400,"message":"Incomplete request"})
+
+        if not chat_id in application.bot_data:
+            application.bot_data[chat_id] = {}
+        if not 'web' in application.bot_data[chat_id]:
+            application.bot_data[chat_id]['web'] = True
+        if application.bot_data[chat_id]['web'] == False:
+            return JSONResponse({"status":400,"message":"Web access disabled"})
+
         
 
         # validate track_id is not None
