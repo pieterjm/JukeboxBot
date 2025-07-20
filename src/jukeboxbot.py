@@ -4,7 +4,7 @@ import re
 import os
 import base64
 import json
-from time import time
+from time import time,sleep
 import html
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -316,7 +316,12 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     title += "\n\nUse the /add command to add your favourite track to the queue, or click on a track to pump it to the top of the queue."
 
-
+    try:
+        result = sp.queue()
+        title +=  "\n\nUp next: " + spotifyhelper.get_track_title(result['queue'][0])
+    except:
+        pass
+        
     if update.effective_chat.id in context.bot_data and 'queue' in context.bot_data[update.effective_chat.id] and len(context.bot_data[update.effective_chat.id]['queue']) > 0:
         pass
     else:
@@ -852,6 +857,33 @@ async def callback_paid_invoice(invoice: Invoice):
         result = await invoicehelper.pay_invoice(donator, donation_invoice)
 
 @debounce
+@adminonly
+@group_chat_only
+async def skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id=update.effective_chat.id
+    sp = await spotifyhelper.get_sp(update.effective_chat.id)
+    if not sp:
+        await send_telegram_message(
+            context=context,
+            chat_id=chat_id,
+            text="Could not obtain player instance",
+            delete_timeout=settings.delete_message_timeout_short)
+        return
+
+    sp.next_track()
+
+    jobs  = context.job_queue.get_jobs_by_name(f"{chat_id}:now_playing")
+    for job in jobs:
+        job.schedule_removal()
+    jobs  = context.job_queue.get_jobs_by_name(f"{chat_id}:manage_queue")
+    for job in jobs:
+        job.schedule_removal()
+
+        
+    # reschedule for the next track
+    context.job_queue.run_once(callback_now_playing, 5, name=f"{chat_id}:now_playing", data=chat_id, job_kwargs = {'misfire_grace_time':None})
+        
+@debounce
 async def web(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     return the Web URL where tracks can be requested using a browser
@@ -1026,8 +1058,8 @@ async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
 
     logging.info(f"Next run in {interval} seconds")
     if interval > 0:
-        context.job_queue.run_once(callback_now_playing, interval + 5, data=chat_id, job_kwargs = {'misfire_grace_time':None})
-        context.job_queue.run_once(callback_manage_queue, interval - 10, data=chat_id, job_kwargs = {'misfire_grace_time':None})
+        context.job_queue.run_once(callback_now_playing, interval + 5, name=f"{chat_id}:now_playing",data=chat_id, job_kwargs = {'misfire_grace_time':None})
+        context.job_queue.run_once(callback_manage_queue, interval - 10, name=f"{chat_id}:manage_queue", data=chat_id, job_kwargs = {'misfire_grace_time':None})
     
             
 async def callback_manage_queue(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1035,7 +1067,6 @@ async def callback_manage_queue(context: ContextTypes.DEFAULT_TYPE) -> None:
     callback function that adds tracks from the local queue to the spotify queue
     """
     chat_id = int(context.job.data)
-    interval = 300
     
     logging.info(f"Callback manage queue for chat: {chat_id}")
 
@@ -1061,10 +1092,14 @@ async def callback_manage_queue(context: ContextTypes.DEFAULT_TYPE) -> None:
 
             if bFound == False:
                 logging.info(f"Adding next in queue {next_in_queue_uri} to sp queue")
+                
                 sp.add_to_queue(next_in_queue_uri)
-                # it is better not to remove
+
+                # it is better not to remove                                    
+                application.bot_data[int(chat_id)]['queue'].pop(next_in_queue_uri)
+                
                 # we could increase the amount of the top song to a ridiculous amount to prevent overtaking
-                add_to_queue_or_upvote(next_in_queue_uri, chat_id, 100000000)
+                #add_to_queue_or_upvote(next_in_queue_uri, chat_id, 100000000)
                 #application.bot_data[int(chat_id)]['queue'].pop(next_in_queue_uri)
 
     except spotipy.oauth2.SpotifyOauthError as err:
@@ -1096,8 +1131,8 @@ async def check_spotify_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
             application.bot_data[chat_id]['last_poll'] = 0
 
         if bFirst == True or time() - application.bot_data[chat_id]['last_poll'] > 3 * settings.max_spotify_poll_interval:
-            logging.info(f"Starting up spotify callback for {chat_id}")
-            context.job_queue.run_once(callback_now_playing, 2, data=chat_id, job_kwargs = {'misfire_grace_time':None})
+            logging.info(f"Skipping starting up spotify callback for {chat_id}")
+            context.job_queue.run_once(callback_now_playing, 2, name=f"{chat_id}:now_playing", data=chat_id, job_kwargs = {'misfire_grace_time':None})
 
     context.job.data = {'first':False}
         
@@ -1381,7 +1416,8 @@ async def main() -> None:
     application.add_handler(CommandHandler("stats",stats)) # dump various stats
     application.add_handler(CommandHandler(["start","faq"],start))  # help message
     application.add_handler(CommandHandler('dj', dj))  # pay another user    
-    application.add_handler(CommandHandler('web', web))  # display the web URL
+    application.add_handler(CommandHandler('web', web))  # display the web URL, or disable/enable web
+    application.add_handler(CommandHandler('skip', skip))  # allow the admin to skip a track
 
     application.add_handler(CallbackQueryHandler(callback_button))
     application.job_queue.run_repeating(regular_cleanup, 12 * 3600)
