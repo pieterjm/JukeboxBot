@@ -862,19 +862,8 @@ async def callback_paid_invoice(invoice: Invoice):
 async def skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id=update.effective_chat.id
 
-    # get spotipy instance
-    sp = await spotifyhelper.get_sp(chat_id)
-    if not sp:
-        await send_telegram_message(
-            context=context,
-            chat_id=chat_id,
-            text="Could not obtain player instance",
-            delete_timeout=settings.delete_message_timeout_short)
-        return
-
-    # skip to the next track
-    sp.next_track()
-
+    await next_in_queue(chat_id, True)
+    
     # remove now_playing and manage_queue jobs
     jobs  = context.job_queue.get_jobs_by_name(f"{chat_id}:now_playing")
     for job in jobs:
@@ -1100,14 +1089,8 @@ async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
         context.job_queue.run_once(callback_now_playing, interval + 5, name=f"{chat_id}:now_playing",data=chat_id, job_kwargs = {'misfire_grace_time':None})
         context.job_queue.run_once(callback_manage_queue, interval - 10, name=f"{chat_id}:manage_queue", data=chat_id, job_kwargs = {'misfire_grace_time':None})
     
-            
-async def callback_manage_queue(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    callback function that adds tracks from the local queue to the spotify queue
-    """
-    chat_id = int(context.job.data)
-    
-    logging.info(f"Callback manage queue for chat: {chat_id}")
+async def next_in_queue(chat_id: int, spotify_next) -> None:
+    logging.info(f"next in queue: {chat_id}")
 
     try:
         # get the auth manager
@@ -1141,12 +1124,25 @@ async def callback_manage_queue(context: ContextTypes.DEFAULT_TYPE) -> None:
                 #add_to_queue_or_upvote(next_in_queue_uri, chat_id, 100000000)
                 #application.bot_data[int(chat_id)]['queue'].pop(next_in_queue_uri)
 
+        # skip to the next track
+        if spotify_next:
+            sp.next_track()
+
     except spotipy.oauth2.SpotifyOauthError as err:
         logging.error(f"SpotifyOAuth error")
     except Exception as err:
         logging.error(f"Unhandled exception in callback_manage_queue {type(err).__name__}")
-    
         
+async def callback_manage_queue(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    callback function that adds tracks from the local queue to the spotify queue
+    """
+    chat_id = int(context.job.data)
+    
+    logging.info(f"Callback manage queue for chat: {chat_id}")
+
+    await next_in_queue(chat_id,False)
+            
 async def check_spotify_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     This function starts up the jobs that monitor the current ]playing track in spotify and manage the play queue
