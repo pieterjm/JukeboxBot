@@ -861,7 +861,9 @@ async def callback_paid_invoice(invoice: Invoice):
 @group_chat_only
 async def skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id=update.effective_chat.id
-    sp = await spotifyhelper.get_sp(update.effective_chat.id)
+
+    # get spotipy instance
+    sp = await spotifyhelper.get_sp(chat_id)
     if not sp:
         await send_telegram_message(
             context=context,
@@ -870,8 +872,10 @@ async def skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             delete_timeout=settings.delete_message_timeout_short)
         return
 
+    # skip to the next track
     sp.next_track()
 
+    # remove now_playing and manage_queue jobs
     jobs  = context.job_queue.get_jobs_by_name(f"{chat_id}:now_playing")
     for job in jobs:
         job.schedule_removal()
@@ -880,7 +884,7 @@ async def skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         job.schedule_removal()
 
         
-    # reschedule for the next track
+    # restart now_playing job
     context.job_queue.run_once(callback_now_playing, 5, name=f"{chat_id}:now_playing", data=chat_id, job_kwargs = {'misfire_grace_time':None})
         
 @debounce
