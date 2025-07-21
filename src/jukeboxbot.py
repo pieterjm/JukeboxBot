@@ -316,11 +316,11 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     title += "\n\nUse the /add command to add your favourite track to the queue, or click on a track to pump it to the top of the queue."
 
-    try:
-        result = sp.queue()
-        title +=  "\n\nUp next: " + spotifyhelper.get_track_title(result['queue'][0])
-    except:
-        pass
+    #try:
+    #    result = sp.queue()
+    #    title +=  "\n\nUp next: " + spotifyhelper.get_track_title(result['queue'][0])
+    #except:
+    #    pass
         
     if update.effective_chat.id in context.bot_data and 'queue' in context.bot_data[update.effective_chat.id] and len(context.bot_data[update.effective_chat.id]['queue']) > 0:
         pass
@@ -1029,13 +1029,6 @@ async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
             # update interval when to update now playing message
             interval  = ( currenttrack['item']['duration_ms'] - currenttrack['progress_ms'] ) / 1000
 
-            # if now playing is next in the player queue, remove from local queue
-            if 'queue' in application.bot_data[chat_id] and len(application.bot_data[chat_id]['queue']) > 0:
-                next_in_queue_uri = list(application.bot_data[int(chat_id)]['queue'].keys())[0]                        
-                if next_in_queue_uri == currenttrack['item']['uri']:
-                    logging.info(f"First track {next_in_queue_uri} in queue is now playing, removing from queue")
-                    application.bot_data[int(chat_id)]['queue'].pop(next_in_queue_uri)
-
         if 'now_playing_message' in application.bot_data[chat_id]:
             logging.info(f"Now playing message is present in bot_data")
             try:
@@ -1262,6 +1255,8 @@ async def callback_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # validate payment conditions
     payment_required = True
     amount_to_pay = int(track_price * len(spotify_uri_list))
+    
+    
     logging.info(f"Amount to pay = {amount_to_pay}")
     if amount_to_pay == 0:
         payment_required = False
@@ -1652,7 +1647,8 @@ async function sendPayment() {{
         amount_to_pay = int(await spotifyhelper.get_price(chat_id))
         if ( track_len > 600 ):
             amount_to_pay = 10 * amount_to_pay
-#        if ( track_len > 1800 ):
+        if ( track_len > 1200 ):
+            amount_to_pay = 10 * amount_to_pay
 #            amount_to_pay = 10 * amount_
 #        elif ( track_len > 600 ):
 #            amount_to_pay = amount_to_pay * 1.0166428 ** (track_len - 300)
@@ -1661,7 +1657,6 @@ async function sendPayment() {{
         invoice = await invoicehelper.create_invoice(recipient, amount_to_pay, invoice_title)
         if invoice is None:
             return JSONResponse({"status":400,"message":"Payments not available"})
-
 
         invoice.user = User(80,"Web user")
         invoice.title = invoice_title

@@ -115,6 +115,7 @@ class LNbits:
     # creates LNURLP link
     async def createLnurlp(self, adminkey, payload):
         # delete all previous paylinks, there could be conflicts
+        print("replacing all paylinks")
         paylinks = []
 
         # get all paylinks

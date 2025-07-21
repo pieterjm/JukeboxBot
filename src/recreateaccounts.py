@@ -7,8 +7,9 @@ from userhelper import User
 
 settings.init()
 
+users = settings.rds.scan_iter("user:*")
 
-for userkey in settings.rds.scan_iter("user:*"):
+for userkey in users:
     userdata = settings.rds.hget(userkey,"userdata")
 
     if userdata is not None:
@@ -17,12 +18,7 @@ for userkey in settings.rds.scan_iter("user:*"):
         tgusername = userdata['telegram_username']
         tguserid = userdata['telegram_userid']
 
-        if userdata['lnurlp'] is None:
-            print(tgusername,tguserid)
-            print(userdata['lnurlp'])
-
-            settings.rds.hdel(userkey,"userdata")
-
-            user = asyncio.run(userhelper.get_or_create_user(tguserid, tgusername))
-
-            print(user.lnurlp)
+        print(tgusername)
+        settings.rds.hdel(userkey,"userdata")
+        user = asyncio.run(userhelper.get_or_create_user(tguserid, tgusername))
+        print(user.lnurlp)
