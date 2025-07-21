@@ -1080,7 +1080,7 @@ async def callback_now_playing(context: ContextTypes.DEFAULT_TYPE) -> None:
     logging.info(f"Next run in {interval} seconds")
     if interval > 0:
         context.job_queue.run_once(callback_now_playing, interval + 5, name=f"{chat_id}:now_playing",data=chat_id, job_kwargs = {'misfire_grace_time':None})
-        context.job_queue.run_once(callback_manage_queue, interval - 10, name=f"{chat_id}:manage_queue", data=chat_id, job_kwargs = {'misfire_grace_time':None})
+        context.job_queue.run_once(callback_manage_queue, interval - 15, name=f"{chat_id}:manage_queue", data=chat_id, job_kwargs = {'misfire_grace_time':None})
     
 async def next_in_queue(chat_id: int, spotify_next) -> None:
     logging.info(f"next in queue: {chat_id}")
@@ -1091,31 +1091,16 @@ async def next_in_queue(chat_id: int, spotify_next) -> None:
         if not sp:
             raise
 
-        # query the current track
-        currenttrack = sp.current_user_playing_track()
-
         # add next track to the player queue
-        if (chat_id in application.bot_data and 'queue') in (application.bot_data[chat_id]) and len(application.bot_data[chat_id]['queue']) > 0:
+        if ((chat_id in application.bot_data) and ('queue' in application.bot_data[chat_id]) and (len(application.bot_data[chat_id]['queue']) > 0)):
             next_in_queue_uri = list(application.bot_data[int(chat_id)]['queue'].keys())[0]                        
-            result = sp.queue()
 
-            bFound = False
-            for i in range(min(5,len(result['queue']))):                           
-                next_spotify_uri = result['queue'][i]['uri']
-                if next_spotify_uri == next_in_queue_uri:
-                    bFound = True
-
-            if bFound == False:
-                logging.info(f"Adding next in queue {next_in_queue_uri} to sp queue")
-                
-                sp.add_to_queue(next_in_queue_uri)
-
-                # it is better not to remove                                    
-                application.bot_data[int(chat_id)]['queue'].pop(next_in_queue_uri)
-                
-                # we could increase the amount of the top song to a ridiculous amount to prevent overtaking
-                #add_to_queue_or_upvote(next_in_queue_uri, chat_id, 100000000)
-                #application.bot_data[int(chat_id)]['queue'].pop(next_in_queue_uri)
+            logging.info(f"Adding next in queue {next_in_queue_uri} to sp queue")
+            
+            sp.add_to_queue(next_in_queue_uri)
+            
+            # it is better not to remove                                    
+            application.bot_data[int(chat_id)]['queue'].pop(next_in_queue_uri)
 
         # skip to the next track
         if spotify_next:
