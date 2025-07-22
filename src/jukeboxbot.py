@@ -75,6 +75,8 @@ import jukeboxtexts
 import invoicehelper
 from invoicehelper import Invoice
 
+anonyms = ['Hal Finney','Satoshi Nakamoto']
+
 jukeboxtexts.init()
 settings.init()
 
@@ -825,9 +827,9 @@ async def callback_paid_invoice(invoice: Invoice):
     add_to_queue_or_upvote(invoice.spotify_uri_list[0],invoice.chat_id,invoice.amount_to_pay)
     
     try:
-        message = f"'{invoice.title}' was added to the queue."        
+        message = f"{random.choice(anonyms)} added '{invoice.title}' to the queue."        
         if invoice.command == telegramhelper.upvote:
-            f"'{invoice.title}' was pumped with {invoice.amount_to_pay} sats."
+            f"{random.choice(anonyms)} pumped '{invoice.title}' with {invoice.amount_to_pay} sats."
 
         await send_telegram_message(
             context=application,
